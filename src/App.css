@@ -1,0 +1,138 @@
+/* ========================================
+   ROOT
+======================================== */
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+/* ========================================
+   APP
+======================================== */
+
+.app {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* ========================================
+   DASHBOARD
+======================================== */
+
+.dashboard {
+  width: 100%;
+  min-height: 100vh;
+
+  padding: 24px;
+
+  background: #f1f5f9;
+
+  box-sizing: border-box;
+}
+
+/* ========================================
+   HEADER
+======================================== */
+
+.dashboard > header {
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+/* ========================================
+   MAIN DASHBOARD
+======================================== */
+
+.dashboard-main {
+  width: 100%;
+
+  display: grid;
+
+  grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr);
+
+  gap: 20px;
+
+  align-items: stretch;
+}
+
+/* ========================================
+   LEFT SIDE
+======================================== */
+
+.dashboard-left {
+  width: 100%;
+  min-width: 0;
+}
+
+/* ========================================
+   GRAPH
+======================================== */
+
+.dashboard-chart {
+  width: 100%;
+  min-width: 0;
+}
+
+/* ========================================
+   RIGHT SIDE
+======================================== */
+
+.dashboard-right {
+  width: 100%;
+  min-width: 0;
+}
+
+
+
+.dashboard-bottom {
+  width: 100%;
+
+  display: grid;
+
+  grid-template-columns: 1fr 1fr;
+
+  gap: 20px;
+
+  margin-top: 20px;
+}
+
+/* ========================================
+   REMOVE DEFAULT VITE STYLING
+======================================== */
+
+.logo {
+  height: auto;
+  padding: 0;
+}
+
+.card {
+  padding: 0;
+}
+
+/* ========================================
+   RESPONSIVE
+======================================== */
+
+@media (max-width: 1000px) {
+  .dashboard-main {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-right {
+    width: 100%;
+  }
+}
+
+@media (max-width: 650px) {
+  .dashboard {
+    padding: 12px;
+  }
+
+  .dashboard-bottom {
+    grid-template-columns: 1fr;
+  }
+}
