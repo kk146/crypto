@@ -1,3 +1,4 @@
+import MarketCapList from "./MarketCapList";
 
 <nav class="w-full bg-white px-6 py-4 border-b border-gray-200">
   <div class="flex items-center">
@@ -34,7 +35,16 @@ type="text"
 placeholder="Search by coin"
 
 class="flex-1 h-10 px-20 border border-gray-300 rounded-md"
-
 />
-
 </div>
+
+ {/* Right Sidebar */}
+
+<div className="w-64">
+<MarketCapList />
+</div>
+</div>
+</div>
+
+
+
