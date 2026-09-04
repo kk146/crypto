@@ -40,8 +40,11 @@ class="flex-1 h-10 px-20 border border-gray-300 rounded-md"
 
  {/* Right Sidebar */}
 
-<div className="w-64">
+<aside className="w-72">
+
 <MarketCapList />
+
+</aside>
 </div>
 </div>
 </div>
