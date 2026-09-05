@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,6 +13,8 @@ import {
 
 import { Line, Bar } from "react-chartjs-2";
 
+import { getCoinMarketChart } from "../services/coinGeckoApi";
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -21,110 +25,164 @@ ChartJS.register(
   Legend
 );
 
+const coinIds = {
+  Bitcoin: "bitcoin",
+  Ethereum: "ethereum",
+  Tether: "tether",
+  XRP: "ripple",
+  Binance: "binancecoin",
+};
+
+const coinColors = {
+  Bitcoin: "#f59e0b",
+  Ethereum: "#3b82f6",
+  Tether: "#10b981",
+  XRP: "#8b5cf6",
+  Binance: "#eab308",
+};
+
+const rangeDays = {
+  "1D": 1,
+  "1W": 7,
+  "1M": 30,
+  "6M": 180,
+  "1Y": 365,
+};
+
 function PriceChart({
   chartType = "line",
   selectedCoins = ["Ethereum"],
+  activeRange = "1W",
+  currency = "usd",
 }) {
-  // --------------------------------------------------
-  // Chart labels
-  // --------------------------------------------------
+  const [chartData, setChartData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const labels = ["Jan", "Feb", "Mar", "Apr", "May", "June"];
+  useEffect(() => {
+    let cancelled = false;
 
-  // Full dates used inside the tooltip
-  const dates = [
-    "Jan 26, 2018",
-    "Feb 26, 2018",
-    "Mar 26, 2018",
-    "Apr 26, 2018",
-    "May 26, 2018",
-    "Jun 26, 2018",
-  ];
+    const loadChartData = async () => {
+      if (!selectedCoins.length) {
+        setChartData(null);
+        setLoading(false);
+        return;
+      }
 
-  // --------------------------------------------------
-  // Sample cryptocurrency data
-  // Later we can connect this to CoinGecko.
-  // --------------------------------------------------
+      setLoading(true);
+      setError("");
 
-  const coinData = {
-    Ethereum: {
-      values: [800, 500, 1200, 500, 1200, 1800],
-      color: "#9DB8FF",
-    },
+      try {
+        const days = rangeDays[activeRange] || 7;
 
-    Bitcoin: {
-      values: [500, 600, 3000, 1000, 2500, 2000],
-      color: "#F58B8B",
-    },
+        const results = await Promise.all(
+          selectedCoins.map(async (coinName) => {
+            const coinId = coinIds[coinName];
 
-    Tether: {
-      values: [700, 900, 1400, 1100, 1600, 2100],
-      color: "#55C7B0",
-    },
+            if (!coinId) {
+              return null;
+            }
 
-    XRP: {
-      values: [400, 700, 1000, 800, 1300, 1700],
-      color: "#A78BFA",
-    },
+            const result = await getCoinMarketChart(
+              coinId,
+              currency,
+              days
+            );
 
-    Binance: {
-      values: [600, 800, 1300, 900, 1500, 1900],
-      color: "#F5C76B",
-    },
-  };
+            return {
+              name: coinName,
+              data: result,
+            };
+          })
+        );
 
-  // --------------------------------------------------
-  // Make sure at least one coin is selected
-  // --------------------------------------------------
+        if (cancelled) return;
 
-  const coins =
-    Array.isArray(selectedCoins) && selectedCoins.length > 0
-      ? selectedCoins
-      : ["Ethereum"];
+        const validResults = results.filter(
+          (result) =>
+            result?.data?.prices?.length > 0
+        );
 
-  // --------------------------------------------------
-  // Create datasets according to selected coins
-  // --------------------------------------------------
+        if (!validResults.length) {
+          setError("No chart data was returned.");
+          setChartData(null);
+          return;
+        }
 
-  const datasets = coins
-    .filter((coin) => coinData[coin])
-    .map((coin) => {
-      const coin = coinData[coin];
+        const firstPrices =
+          validResults[0].data.prices;
 
-      return {
-        label: coin,
-        data: coin.values,
+        const labels = firstPrices.map(
+          ([timestamp]) =>
+            new Date(timestamp).toLocaleDateString(
+              [],
+              {
+                month: "short",
+                day: "numeric",
+              }
+            )
+        );
 
-        borderColor: coin.color,
-        backgroundColor: coin.color,
+        const datasets = validResults.map(
+          (result) => ({
+            label: result.name,
 
-        borderWidth: 2,
+            data: result.data.prices.map(
+              ([, price]) => price
+            ),
 
-        // Bar settings
-        barPercentage: 0.55,
-        categoryPercentage: 0.7,
+            borderColor:
+              coinColors[result.name] ||
+              "#3b82f6",
 
-        // Line settings
-        tension: 0.25,
-        pointRadius: 2,
-        pointHoverRadius: 5,
+            backgroundColor:
+              coinColors[result.name] ||
+              "#3b82f6",
 
-        fill: false,
-      };
-    });
+            borderWidth: 2,
 
-  // --------------------------------------------------
-  // Chart data
-  // --------------------------------------------------
+            tension: 0.3,
 
-  const data = {
-    labels,
-    datasets,
-  };
+            pointRadius:
+              activeRange === "1D" ? 1 : 2,
 
-  // --------------------------------------------------
-  // Chart options
-  // --------------------------------------------------
+            pointHoverRadius: 5,
+
+            fill: false,
+
+            barPercentage: 0.65,
+
+            categoryPercentage: 0.75,
+          })
+        );
+
+        setChartData({
+          labels,
+          datasets,
+        });
+      } catch (err) {
+        console.error(err);
+
+        if (!cancelled) {
+          setError(
+            "Unable to load cryptocurrency data."
+          );
+
+          setChartData(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadChartData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCoins, activeRange, currency]);
 
   const options = {
     responsive: true,
@@ -136,82 +194,41 @@ function PriceChart({
     },
 
     plugins: {
-      // ----------------------------------------------
-      // Legend
-      // ----------------------------------------------
-
       legend: {
-        display: true,
-
+        display: selectedCoins.length > 1,
         position: "top",
-        align: "end",
-
         labels: {
           usePointStyle: true,
-          pointStyle: "circle",
-
-          boxWidth: 7,
-          boxHeight: 7,
-
-          padding: 10,
-
+          boxWidth: 8,
           font: {
-            size: 9,
+            size: 11,
           },
         },
       },
 
-      // ----------------------------------------------
-      // Tooltip
-      // ----------------------------------------------
-
       tooltip: {
-        enabled: true,
-
-        backgroundColor: "#ffffff",
-
-        titleColor: "#9CA3AF",
-        bodyColor: "#374151",
-
-        borderColor: "#E5E7EB",
-        borderWidth: 1,
-
-        padding: 10,
-
-        titleFont: {
-          size: 10,
-          weight: "normal",
-        },
-
-        bodyFont: {
-          size: 10,
-        },
-
-        displayColors: true,
-
         callbacks: {
-          // Full date
-          title: (tooltipItems) => {
-            const index = tooltipItems[0].dataIndex;
-
-            return dates[index];
+          title: (items) => {
+            return items[0]?.label || "";
           },
 
-          // Cryptocurrency + market value
           label: (context) => {
-            const value = context.raw;
+            const value = context.parsed.y;
 
-            return `${context.dataset.label}  Market value $${Number(
-              value
-            ).toLocaleString()}`;
+            if (typeof value !== "number") {
+              return `${context.dataset.label}: -`;
+            }
+
+            return `${context.dataset.label}: ${value.toLocaleString(
+              undefined,
+              {
+                maximumFractionDigits: 2,
+              }
+            )} ${currency.toUpperCase()}`;
           },
         },
       },
     },
-
-    // ------------------------------------------------
-    // Axes
-    // ------------------------------------------------
 
     scales: {
       x: {
@@ -219,109 +236,94 @@ function PriceChart({
           display: false,
         },
 
-        border: {
-          display: false,
-        },
-
         ticks: {
-          color: "#9CA3AF",
-
+          maxTicksLimit: 7,
           font: {
-            size: 9,
+            size: 10,
           },
         },
       },
 
       y: {
-        beginAtZero: true,
+        beginAtZero: false,
 
         grid: {
-          color: "#E5E7EB",
-          drawBorder: false,
-        },
-
-        border: {
-          display: false,
+          color: "#f1f5f9",
         },
 
         ticks: {
-          color: "#9CA3AF",
-
           font: {
-            size: 8,
+            size: 10,
           },
 
-          callback: (value) => {
-            if (value >= 1000) {
-              return `${value / 1000}K`;
-            }
-
-            return value;
-          },
+          callback: (value) =>
+            Number(value).toLocaleString(
+              undefined,
+              {
+                maximumFractionDigits: 0,
+              }
+            ),
         },
       },
     },
   };
 
-  // --------------------------------------------------
-  // Decide which chart to display
-  // --------------------------------------------------
+  if (loading) {
+    return (
+      <div className="flex h-[300px] items-center justify-center">
+        <p className="text-sm text-gray-400">
+          Loading market data...
+        </p>
+      </div>
+    );
+  }
 
-  const isLineChart =
-    chartType === "line";
+  if (error) {
+    return (
+      <div className="flex h-[300px] items-center justify-center">
+        <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-500">
+          {error}
+        </p>
+      </div>
+    );
+  }
 
-  const isHorizontalBar =
-    chartType === "bar-chart-horizontal";
+  if (!chartData) {
+    return (
+      <div className="flex h-[300px] items-center justify-center">
+        <p className="text-sm text-gray-400">
+          Select a cryptocurrency.
+        </p>
+      </div>
+    );
+  }
 
-  // --------------------------------------------------
-  // Render
-  // --------------------------------------------------
+  const finalOptions = {
+    ...options,
+
+    indexAxis:
+      chartType === "bar-chart-horizontal"
+        ? "y"
+        : "x",
+  };
+
+  if (chartType === "line") {
+    return (
+      <div className="h-[300px] w-full">
+        <Line
+          data={chartData}
+          options={finalOptions}
+        />
+      </div>
+    );
+  }
 
   return (
-    <div className="h-[245px] w-full">
-      {isLineChart ? (
-        <Line
-          data={data}
-          options={options}
-        />
-      ) : (
-        <Bar
-          data={data}
-          options={{
-            ...options,
-
-            indexAxis: isHorizontalBar ? "y" : "x",
-
-            scales: {
-              ...options.scales,
-
-              x: {
-                ...options.scales.x,
-
-                beginAtZero: !isHorizontalBar,
-
-                grid: {
-                  display: isHorizontalBar
-                    ? true
-                    : false,
-                  color: "#E5E7EB",
-                },
-              },
-
-              y: {
-                ...options.scales.y,
-
-                beginAtZero: true,
-
-                grid: {
-                  display: true,
-                  color: "#E5E7EB",
-                },
-              },
-            },
-          }}
-        />
-      )}
+    <div className="h-[300px] w-full">
+      <Bar
+        data={chartData}
+        options={finalOptions}
+      />
     </div>
   );
 }
