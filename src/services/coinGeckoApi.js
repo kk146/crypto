@@ -7,7 +7,8 @@ const apiConfig = {};
 
 if (import.meta.env.VITE_COINGECKO_API_KEY) {
   apiConfig.headers = {
-    "x-cg-demo-api-key": import.meta.env.VITE_COINGECKO_API_KEY,
+    "x-cg-demo-api-key":
+      import.meta.env.VITE_COINGECKO_API_KEY,
   };
 }
 
@@ -30,12 +31,16 @@ export const getTopCoins = async (currency = "usd") => {
 
     return response.data;
   } catch (error) {
-    console.error("Error fetching coins:", error);
+    console.error(
+      "Error fetching coins:",
+      error
+    );
+
     return [];
   }
 };
 
-// Get historical cryptocurrency prices for the chart
+// Get historical cryptocurrency prices
 export const getCoinMarketChart = async (
   coinId,
   currency = "usd",
@@ -47,7 +52,7 @@ export const getCoinMarketChart = async (
       {
         params: {
           vs_currency: currency,
-          days: days,
+          days,
         },
         ...apiConfig,
       }
@@ -64,7 +69,7 @@ export const getCoinMarketChart = async (
   }
 };
 
-// Get current exchange rate
+// Get current cryptocurrency exchange rates
 export const getExchangeRate = async (
   fromId,
   toId,
