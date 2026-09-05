@@ -1,37 +1,134 @@
-import { useState } from "react";
+import React, { useState } from "react";
+
+const currencies = [
+  "Bitcoin",
+  "Ethereum",
+  "Tether",
+  "BNB",
+  "Solana",
+  "USD",
+  "GBP",
+  "EUR",
+  "INR",
+];
 
 function ExchangeCoins() {
+  const [sellCurrency, setSellCurrency] = useState("Bitcoin");
+  const [buyCurrency, setBuyCurrency] = useState("Ethereum");
   const [amount, setAmount] = useState("");
 
+  const handleExchange = () => {
+    if (!amount) {
+      alert("Please enter a value");
+      return;
+    }
+
+    alert(
+      `Exchanging ${amount} ${sellCurrency} to ${buyCurrency}`
+    );
+  };
+
   return (
-    <div className="bg-white rounded-xl p-5 shadow-sm h-[300px]">
-      <h2 className="font-bold text-lg mb-5">Exchange Coins</h2>
+    <div className="w-full bg-white">
 
-      <div className="space-y-4">
-        <select className="w-full border rounded-lg p-3">
-          <option>Bitcoin (BTC)</option>
-          <option>Ethereum (ETH)</option>
-          <option>Solana (SOL)</option>
-        </select>
+      {/* Heading */}
+      <h2 className="mb-5 text-[15px] font-semibold text-black">
+        Exchange Coins
+      </h2>
 
-        <select className="w-full border rounded-lg p-3">
-          <option>Ethereum (ETH)</option>
-          <option>Bitcoin (BTC)</option>
-          <option>BNB</option>
-        </select>
+      {/* SELL ROW */}
+      <div className="flex w-full items-center gap-3">
 
-        <input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="Enter Amount"
-          className="w-full border rounded-lg p-3"
-        />
+        {/* Sell */}
+        <div className="w-[30px] shrink-0">
+          <span className="text-[10px] font-medium text-[#ff6b22]">
+            Sell
+          </span>
+        </div>
 
-        <button className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700">
+        {/* Currency dropdown */}
+        <div className="relative flex-1">
+          <select
+            value={sellCurrency}
+            onChange={(e) => setSellCurrency(e.target.value)}
+            className="h-[40px] w-full appearance-none rounded-[9px] border-0 bg-[#f8f8f8] px-3 pr-8 text-[10px] font-semibold text-[#64748b] outline-none"
+          >
+            {currencies.map((currency) => (
+              <option key={currency} value={currency}>
+                {currency}
+              </option>
+            ))}
+          </select>
+
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-black">
+            ▼
+          </span>
+        </div>
+
+        {/* Value input */}
+        <div className="flex-1">
+          <label className="mb-1 block text-[9px] font-medium text-[#94a3b8]">
+            Enter value
+          </label>
+
+          <input
+            type="text"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Avl : 0.002BTC"
+            className="h-[40px] w-full rounded-[9px] border border-[#eeeeee] bg-white px-3 text-[9px] text-[#555555] outline-none placeholder:text-[#b7b7b7]"
+          />
+        </div>
+      </div>
+
+      {/* BUY ROW */}
+      <div className="mt-5 flex w-full items-center gap-3">
+
+        {/* Buy */}
+        <div className="w-[30px] shrink-0">
+          <span className="text-[10px] font-medium text-[#42a58e]">
+            Buy
+          </span>
+        </div>
+
+        {/* Currency dropdown */}
+        <div className="relative flex-1">
+          <select
+            value={buyCurrency}
+            onChange={(e) => setBuyCurrency(e.target.value)}
+            className="h-[40px] w-full appearance-none rounded-[9px] border-0 bg-[#f8f8f8] px-3 pr-8 text-[10px] font-semibold text-[#64748b] outline-none"
+          >
+            {currencies.map((currency) => (
+              <option key={currency} value={currency}>
+                {currency}
+              </option>
+            ))}
+          </select>
+
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-black">
+            ▼
+          </span>
+        </div>
+
+        {/* Buy result */}
+        <div className="flex-1">
+          <span className="whitespace-nowrap text-[10px] font-semibold text-[#42a58e]">
+            23000 Eth
+          </span>
+        </div>
+      </div>
+
+      {/* Exchange button */}
+      <div className="mt-6 flex justify-center">
+        <button
+          type="button"
+          onClick={handleExchange}
+          className="h-[40px] min-w-[112px] rounded-[8px] bg-[#2864dc] px-6 text-[10px] font-medium text-white shadow-md transition hover:bg-[#1f56c5]"
+        >
           Exchange
         </button>
       </div>
+
     </div>
   );
 }
