@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-
-const API_URL = "https://api.coingecko.com/api/v3";
+import { getTopCoins } from "../services/coinGeckoApi";
 
 function MarketCapList({ currency = "usd" }) {
   const [coins, setCoins] = useState([]);
@@ -9,31 +8,43 @@ function MarketCapList({ currency = "usd" }) {
 
   // Fetch market cap data
   useEffect(() => {
+    let cancelled = false;
+
     const fetchMarketCap = async () => {
       try {
         setLoading(true);
         setError("");
 
-        const response = await fetch(
-          `${API_URL}/coins/markets?vs_currency=${currency}&order=market_cap_desc&per_page=7&page=1&sparkline=false&price_change_percentage=24h`
-        );
+        const data = await getTopCoins(currency);
 
-        if (!response.ok) {
-          throw new Error(`API Error: ${response.status}`);
+        if (cancelled) return;
+
+        if (!data || data.length === 0) {
+          setCoins([]);
+          setError("Unable to load market data.");
+          return;
         }
 
-        const data = await response.json();
-
-        setCoins(data);
+        setCoins(data.slice(0, 7));
       } catch (err) {
         console.error("Market Cap Error:", err);
-        setError("Unable to load market data.");
+
+        if (!cancelled) {
+          setError("Unable to load market data.");
+          setCoins([]);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     fetchMarketCap();
+
+    return () => {
+      cancelled = true;
+    };
   }, [currency]);
 
   // Format market cap
@@ -42,12 +53,16 @@ function MarketCapList({ currency = "usd" }) {
       return "N/A";
     }
 
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency.toUpperCase(),
-      notation: "compact",
-      maximumFractionDigits: 2,
-    }).format(value);
+    try {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: currency.toUpperCase(),
+        notation: "compact",
+        maximumFractionDigits: 2,
+      }).format(value);
+    } catch (error) {
+      return `${value.toLocaleString()} ${currency.toUpperCase()}`;
+    }
   };
 
   // Format 24h change
@@ -114,6 +129,19 @@ function MarketCapList({ currency = "usd" }) {
           }}
         >
           {error}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!loading && !error && coins.length === 0 && (
+        <div
+          style={{
+            padding: "20px",
+            fontSize: "13px",
+            color: "#9ca3af",
+          }}
+        >
+          No market data available.
         </div>
       )}
 
