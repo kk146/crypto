@@ -66,11 +66,13 @@ function PriceChart({
       if (!selectedCoins.length) {
         setChartData(null);
         setLoading(false);
+        setError("");
         return;
       }
 
       setLoading(true);
       setError("");
+      setChartData(null);
 
       try {
         const days = rangeDays[activeRange] || 7;
@@ -91,6 +93,7 @@ function PriceChart({
 
             return {
               name: coinName,
+              coinId,
               data: result,
             };
           })
@@ -100,7 +103,8 @@ function PriceChart({
 
         const validResults = results.filter(
           (result) =>
-            result?.data?.prices?.length > 0
+            result?.data?.prices &&
+            result.data.prices.length > 0
         );
 
         if (!validResults.length) {
@@ -109,11 +113,46 @@ function PriceChart({
           return;
         }
 
-        const firstPrices =
-          validResults[0].data.prices;
+        /*
+         * Create a common timestamp list from all selected
+         * cryptocurrencies.
+         */
+        const timestampSet = new Set();
 
-        const labels = firstPrices.map(
-          ([timestamp]) =>
+        validResults.forEach((result) => {
+          result.data.prices.forEach(([timestamp]) => {
+            timestampSet.add(timestamp);
+          });
+        });
+
+        const timestamps = Array.from(timestampSet).sort(
+          (a, b) => a - b
+        );
+
+        /*
+         * Limit the number of visible points for longer
+         * ranges so the chart stays responsive.
+         */
+        let displayTimestamps = timestamps;
+
+        if (activeRange === "6M" && timestamps.length > 90) {
+          const step = Math.ceil(timestamps.length / 90);
+
+          displayTimestamps = timestamps.filter(
+            (_, index) => index % step === 0
+          );
+        }
+
+        if (activeRange === "1Y" && timestamps.length > 100) {
+          const step = Math.ceil(timestamps.length / 100);
+
+          displayTimestamps = timestamps.filter(
+            (_, index) => index % step === 0
+          );
+        }
+
+        const labels = displayTimestamps.map(
+          (timestamp) =>
             new Date(timestamp).toLocaleDateString(
               [],
               {
@@ -123,13 +162,53 @@ function PriceChart({
             )
         );
 
-        const datasets = validResults.map(
-          (result) => ({
+        /*
+         * Create one lookup table for every cryptocurrency.
+         * This prevents values from being matched only by
+         * array position.
+         */
+        const datasets = validResults.map((result) => {
+          const priceMap = new Map(
+            result.data.prices.map(
+              ([timestamp, price]) => [
+                timestamp,
+                price,
+              ]
+            )
+          );
+
+          const data = displayTimestamps.map(
+            (timestamp) => {
+              if (priceMap.has(timestamp)) {
+                return priceMap.get(timestamp);
+              }
+
+              /*
+               * If the exact timestamp isn't available,
+               * find the closest previous price.
+               */
+              let closestPrice = null;
+
+              for (let i = timestamps.length - 1; i >= 0; i--) {
+                const previousTimestamp =
+                  timestamps[i];
+
+                if (previousTimestamp <= timestamp) {
+                  closestPrice =
+                    priceMap.get(previousTimestamp) ??
+                    null;
+                  break;
+                }
+              }
+
+              return closestPrice;
+            }
+          );
+
+          return {
             label: result.name,
 
-            data: result.data.prices.map(
-              ([, price]) => price
-            ),
+            data,
 
             borderColor:
               coinColors[result.name] ||
@@ -153,15 +232,18 @@ function PriceChart({
             barPercentage: 0.65,
 
             categoryPercentage: 0.75,
-          })
-        );
+          };
+        });
 
         setChartData({
           labels,
           datasets,
         });
       } catch (err) {
-        console.error(err);
+        console.error(
+          "Chart data error:",
+          err
+        );
 
         if (!cancelled) {
           setError(
@@ -197,9 +279,11 @@ function PriceChart({
       legend: {
         display: selectedCoins.length > 1,
         position: "top",
+
         labels: {
           usePointStyle: true,
           boxWidth: 8,
+
           font: {
             size: 11,
           },
@@ -238,6 +322,7 @@ function PriceChart({
 
         ticks: {
           maxTicksLimit: 7,
+
           font: {
             size: 10,
           },
