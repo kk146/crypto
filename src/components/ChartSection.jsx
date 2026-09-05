@@ -1,109 +1,174 @@
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Tooltip,
-  Legend,
-} from "chart.js";
-
-import { Line, Bar } from "react-chartjs-2";
 import { useState } from "react";
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Tooltip,
-  Legend
-);
+import PriceChart from "./PriceChart";
 
 function ChartSection() {
   const [chartType, setChartType] = useState("line");
   const [activeRange, setActiveRange] = useState("1W");
 
-  const data = {
-    labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
-    datasets: [
-      {
-        label: "Ethereum",
-        data: [50, 80, 400, 150, 1000, 5000],
-        borderColor: "#2563eb",
-        backgroundColor: "#2563eb",
-        tension: 0.4,
-      },
-      {
-        label: "Bitcoin",
-        data: [0, 300, 500, 700, 2500, 4500],
-        borderColor: "#ef4444",
-        backgroundColor: "#ef4444",
-        tension: 0.4,
-      },
-    ],
-  };
+  const [selectedCoins, setSelectedCoins] = useState(["Ethereum"]);
+  const [showCoinDropdown, setShowCoinDropdown] = useState(false);
+  const [coinSearch, setCoinSearch] = useState("");
 
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "top",
-      },
-    },
-  };
+  const coins = [
+    "Bitcoin",
+    "Ethereum",
+    "Tether",
+    "XRP",
+    "Binance",
+  ];
 
   const ranges = ["1D", "1W", "1M", "6M", "1Y"];
 
+  const filteredCoins = coins.filter((coin) =>
+    coin.toLowerCase().includes(coinSearch.toLowerCase())
+  );
+
+  const toggleCoin = (coin) => {
+    setSelectedCoins((current) => {
+      if (current.includes(coin)) {
+        // Don't allow all coins to be removed
+        if (current.length === 1) {
+          return current;
+        }
+
+        return current.filter((item) => item !== coin);
+      }
+
+      return [...current, coin];
+    });
+  };
+
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm">
-      {/* Top Controls */}
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex gap-2">
-          {ranges.map((range) => (
-            <button
-              key={range}
-              onClick={() => setActiveRange(range)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                activeRange === range
-                  ? "bg-blue-500 text-white"
-                  : "bg-gray-100 text-gray-700"
-              }`}
+    <div className="w-full rounded-xl bg-white p-4 shadow-sm">
+      {/* Top controls */}
+      <div className="mb-4 flex flex-col gap-3">
+        {/* First row */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Time range */}
+          <div className="flex flex-wrap gap-1.5">
+            {ranges.map((range) => (
+              <button
+                key={range}
+                type="button"
+                onClick={() => setActiveRange(range)}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                  activeRange === range
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                }`}
+              >
+                {range}
+              </button>
+            ))}
+          </div>
+
+          {/* Right controls */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Coin selector */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() =>
+                  setShowCoinDropdown((current) => !current)
+                }
+                className="flex min-w-[160px] items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700"
+              >
+                <span>
+                  {selectedCoins.length === 1
+                    ? selectedCoins[0]
+                    : `${selectedCoins.length} coins selected`}
+                </span>
+
+                <span className="ml-3 text-gray-400">
+                  {showCoinDropdown ? "▲" : "▼"}
+                </span>
+              </button>
+
+              {showCoinDropdown && (
+                <div className="absolute right-0 z-20 mt-1 w-[210px] rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+                  {/* Search */}
+                  <input
+                    type="text"
+                    value={coinSearch}
+                    onChange={(e) => setCoinSearch(e.target.value)}
+                    placeholder="Search coin..."
+                    className="mb-2 w-full rounded-md border border-gray-200 px-2.5 py-1.5 text-xs outline-none focus:border-blue-400"
+                  />
+
+                  {/* Coin list */}
+                  <div className="max-h-[180px] overflow-y-auto">
+                    {filteredCoins.map((coin) => (
+                      <label
+                        key={coin}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-xs hover:bg-gray-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedCoins.includes(coin)}
+                          onChange={() => toggleCoin(coin)}
+                          className="h-3.5 w-3.5 rounded"
+                        />
+
+                        <span>{coin}</span>
+                      </label>
+                    ))}
+
+                    {filteredCoins.length === 0 && (
+                      <p className="px-2 py-2 text-xs text-gray-400">
+                        No coin found
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Close */}
+                  <button
+                    type="button"
+                    onClick={() => setShowCoinDropdown(false)}
+                    className="mt-2 w-full rounded-md bg-gray-100 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-200"
+                  >
+                    Done
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Chart type */}
+            <select
+              value={chartType}
+              onChange={(e) => setChartType(e.target.value)}
+              className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 outline-none"
             >
-              {range}
-            </button>
-          ))}
+              <option value="line">Line Chart</option>
+              <option value="bar">Bar Chart</option>
+              <option value="bar-chart-horizontal">
+                Horizontal Bar
+              </option>
+            </select>
+          </div>
         </div>
 
-        <div className="flex gap-3">
-          <select className="border rounded-lg px-4 py-2">
-            <option>Bitcoin</option>
-            <option>Ethereum</option>
-            <option>Tether</option>
-            <option>BNB</option>
-          </select>
+        {/* Selected coins */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-gray-400">Selected:</span>
 
-          <select
-            value={chartType}
-            onChange={(e) => setChartType(e.target.value)}
-            className="border rounded-lg px-4 py-2"
-          >
-            <option value="line">Line Chart</option>
-            <option value="bar">Bar Chart</option>
-          </select>
+          {selectedCoins.map((coin) => (
+            <span
+              key={coin}
+              className="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-600"
+            >
+              {coin}
+            </span>
+          ))}
         </div>
       </div>
 
       {/* Chart */}
-      <div className="h-[400px]">
-        {chartType === "line" ? (
-          <Line data={data} options={options} />
-        ) : (
-          <Bar data={data} options={options} />
-        )}
+      <div className="w-full">
+        <PriceChart
+          chartType={chartType}
+          selectedCoins={selectedCoins}
+          activeRange={activeRange}
+        />
       </div>
     </div>
   );
