@@ -1,13 +1,17 @@
-export default function CurrencyDropdown({ value, currencies, onChange }) {
+export default function CurrencyDropdown({
+  value,
+  currencies,
+  onChange,
+}) {
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="px-4 py-2 border rounded-lg bg-white"
+      className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 outline-none"
     >
-      {currencies.map((coin) => (
-        <option key={coin} value={coin}>
-          {coin}
+      {currencies.map((currency) => (
+        <option key={currency} value={currency}>
+          {currency.toUpperCase()}
         </option>
       ))}
     </select>
