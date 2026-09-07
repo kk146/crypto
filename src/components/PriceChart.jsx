@@ -10,6 +10,7 @@ import {
   Legend,
 } from "chart.js";
 import { Line, Bar } from "react-chartjs-2";
+
 import { getCoinMarketChart } from "../services/coinGeckoApi";
 
 ChartJS.register(
@@ -22,7 +23,7 @@ ChartJS.register(
   Legend
 );
 
-const COIN_IDS = {
+const coinIds = {
   Bitcoin: "bitcoin",
   Ethereum: "ethereum",
   Tether: "tether",
@@ -30,15 +31,15 @@ const COIN_IDS = {
   Binance: "binancecoin",
 };
 
-const COIN_COLORS = {
-  Bitcoin: "#f7931a",
+const coinColors = {
+  Bitcoin: "#f59e0b",
   Ethereum: "#3b82f6",
   Tether: "#10b981",
   XRP: "#8b5cf6",
-  Binance: "#f59e0b",
+  Binance: "#eab308",
 };
 
-const RANGE_DAYS = {
+const rangeDays = {
   "1D": 1,
   "1W": 7,
   "1M": 30,
@@ -46,163 +47,24 @@ const RANGE_DAYS = {
   "1Y": 365,
 };
 
-function getRangeDays(activeRange) {
-  return RANGE_DAYS[activeRange] || 7;
-}
-
-function formatCurrency(value, currency) {
-  if (value === null || value === undefined) {
-    return "N/A";
-  }
-
-  return `${Number(value).toLocaleString(undefined, {
-    maximumFractionDigits: 2,
-  })} ${currency.toUpperCase()}`;
-}
-
-/*
-  Reduce line-chart points so the chart remains readable.
-*/
-function reduceLinePoints(points, activeRange) {
-  if (!points || points.length === 0) {
-    return [];
-  }
-
-  let maxPoints = 50;
-
-  if (activeRange === "1D") {
-    maxPoints = 24;
-  }
-
-  if (activeRange === "1W") {
-    maxPoints = 35;
-  }
-
-  if (activeRange === "1M") {
-    maxPoints = 31;
-  }
-
-  if (activeRange === "6M") {
-    maxPoints = 30;
-  }
-
-  if (activeRange === "1Y") {
-    maxPoints = 40;
-  }
-
-  const step = Math.max(
-    1,
-    Math.ceil(points.length / maxPoints)
-  );
-
-  return points.filter(
-    (_, index) => index % step === 0
-  );
-}
-
-/*
-  Create clean labels for the bar chart.
-
-  The bar chart uses monthly buckets for longer
-  ranges, giving the clean Jan / Feb / Mar style
-  shown in your reference image.
-*/
-function createBarBuckets(points, activeRange) {
-  if (!points || points.length === 0) {
-    return [];
-  }
-
-  const buckets = {};
-
-  points.forEach(([timestamp, price]) => {
-    const date = new Date(timestamp);
-
-    let key;
-
-    if (
-      activeRange === "6M" ||
-      activeRange === "1Y"
-    ) {
-      key = `${date.getFullYear()}-${date.getMonth()}`;
-    } else if (activeRange === "1M") {
-      key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-    } else {
-      key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-    }
-
-    if (!buckets[key]) {
-      buckets[key] = {
-        timestamp,
-        values: [],
-      };
-    }
-
-    buckets[key].values.push(price);
-  });
-
-  return Object.values(buckets).map((bucket) => {
-    const average =
-      bucket.values.reduce(
-        (sum, value) => sum + value,
-        0
-      ) / bucket.values.length;
-
-    return {
-      timestamp: bucket.timestamp,
-      value: average,
-    };
-  });
-}
-
-function formatBarLabel(timestamp, activeRange) {
-  const date = new Date(timestamp);
-
-  if (
-    activeRange === "6M" ||
-    activeRange === "1Y"
-  ) {
-    return date.toLocaleDateString([], {
-      month: "short",
-    });
-  }
-
-  if (activeRange === "1M") {
-    return date.toLocaleDateString([], {
-      month: "short",
-      day: "numeric",
-    });
-  }
-
-  return date.toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-  });
-}
-
 function PriceChart({
-  chartType,
-  selectedCoins,
-  activeRange,
+  chartType = "line",
+  selectedCoins = ["Ethereum"],
+  activeRange = "1W",
   currency = "usd",
 }) {
-  const [rawData, setRawData] = useState([]);
+  const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  /*
-    Fetch data whenever:
-    - cryptocurrency selection changes
-    - range changes
-    - currency changes
-  */
   useEffect(() => {
     let cancelled = false;
 
     const loadCharts = async () => {
-      if (
-        !selectedCoins ||
-        selectedCoins.length === 0
-      ) {
+      if (!selectedCoins || selectedCoins.length === 0) {
+        setChartData([]);
+        setError("Select at least one cryptocurrency.");
+        setLoading(false);
         return;
       }
 
@@ -210,60 +72,51 @@ function PriceChart({
         setLoading(true);
         setError("");
 
-        const days = getRangeDays(activeRange);
+        const days = rangeDays[activeRange] || 7;
 
-        const results = await Promise.all(
+        const responses = await Promise.all(
           selectedCoins.map(async (coin) => {
-            const coinId = COIN_IDS[coin];
+            const coinId = coinIds[coin];
 
             if (!coinId) {
               return {
                 coin,
-                data: null,
+                prices: [],
               };
             }
 
-            const data =
-              await getCoinMarketChart(
-                coinId,
-                currency,
-                days
-              );
+            const data = await getCoinMarketChart(
+              coinId,
+              currency,
+              days
+            );
 
             return {
               coin,
-              data,
+              prices: data?.prices || [],
             };
           })
         );
 
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
-        const validResults = results.filter(
-          (result) =>
-            result.data &&
-            result.data.prices &&
-            result.data.prices.length > 0
+        const validData = responses.filter(
+          (item) => item.prices.length > 0
         );
 
-        if (validResults.length === 0) {
+        if (validData.length === 0) {
+          setChartData([]);
           setError("Unable to load chart data.");
-          setRawData([]);
           return;
         }
 
-        setRawData(validResults);
+        setChartData(validData);
       } catch (err) {
-        console.error(
-          "Price Chart Error:",
-          err
-        );
+        console.error("Chart Error:", err);
 
         if (!cancelled) {
+          setChartData([]);
           setError("Unable to load chart data.");
-          setRawData([]);
         }
       } finally {
         if (!cancelled) {
@@ -277,315 +130,321 @@ function PriceChart({
     return () => {
       cancelled = true;
     };
-  }, [
-    selectedCoins,
-    activeRange,
-    currency,
-  ]);
+  }, [selectedCoins, activeRange, currency]);
 
   /*
-    Build the chart data.
-  */
-  const chartData = useMemo(() => {
-    if (!rawData.length) {
-      return null;
-    }
-
-    /*
-      BAR CHART
-    */
-    if (chartType === "bar") {
-      const allBuckets = [];
-
-      rawData.forEach(({ data }) => {
-        const buckets = createBarBuckets(
-          data.prices,
-          activeRange
-        );
-
-        buckets.forEach((bucket) => {
-          const label = formatBarLabel(
-            bucket.timestamp,
-            activeRange
-          );
-
-          if (!allBuckets.includes(label)) {
-            allBuckets.push(label);
-          }
-        });
-      });
-
-      const datasets = rawData.map(
-        ({ coin, data }) => {
-          const buckets = createBarBuckets(
-            data.prices,
-            activeRange
-          );
-
-          const bucketMap = {};
-
-          buckets.forEach((bucket) => {
-            const label = formatBarLabel(
-              bucket.timestamp,
-              activeRange
-            );
-
-            bucketMap[label] = bucket.value;
-          });
-
-          return {
-            label: coin,
-
-            data: allBuckets.map(
-              (label) =>
-                bucketMap[label] ?? null
-            ),
-
-            backgroundColor:
-              COIN_COLORS[coin] ||
-              "#3b82f6",
-
-            borderColor:
-              COIN_COLORS[coin] ||
-              "#3b82f6",
-
-            borderWidth: 0,
-
-            borderRadius: 2,
-
-            barPercentage: 0.7,
-
-            categoryPercentage: 0.65,
-          };
-        }
-      );
-
+   * Convert CoinGecko's many timestamp points into
+   * a smaller number of readable points.
+   *
+   * This gives the graph the clean appearance
+   * from your 3rd screenshot.
+   */
+  const processed = useMemo(() => {
+    if (!chartData.length) {
       return {
-        labels: allBuckets,
-        datasets,
+        labels: [],
+        datasets: [],
       };
     }
 
-    /*
-      LINE CHART
-    */
-    const referencePoints =
-      reduceLinePoints(
-        rawData[0].data.prices,
-        activeRange
+    const longest = Math.max(
+      ...chartData.map((item) => item.prices.length)
+    );
+
+    const pointCount =
+      activeRange === "1D"
+        ? 12
+        : activeRange === "1W"
+        ? 7
+        : activeRange === "1M"
+        ? 6
+        : activeRange === "6M"
+        ? 6
+        : 6;
+
+    const indexes = [];
+
+    for (let i = 0; i < pointCount; i++) {
+      const index = Math.round(
+        (i * (longest - 1)) / (pointCount - 1 || 1)
       );
 
-    const labels = referencePoints.map(
-      ([timestamp]) => {
-        const date = new Date(timestamp);
+      indexes.push(index);
+    }
 
-        if (activeRange === "1D") {
-          return date.toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-        }
+    const labels = indexes.map((index) => {
+      const firstCoin = chartData[0];
 
-        return date.toLocaleDateString([], {
+      const timestamp =
+        firstCoin.prices[index]?.[0];
+
+      if (!timestamp) return "";
+
+      const date = new Date(timestamp);
+
+      if (
+        activeRange === "1D" ||
+        activeRange === "1W"
+      ) {
+        return date.toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
         });
       }
-    );
 
-    const datasets = rawData.map(
-      ({ coin, data }) => {
-        const points = reduceLinePoints(
-          data.prices,
-          activeRange
-        );
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+      });
+    });
 
-        return {
-          label: coin,
+    const datasets = chartData.map((item, index) => {
+      const prices = indexes.map(
+        (pointIndex) =>
+          item.prices[pointIndex]?.[1] ?? null
+      );
 
-          data: points.map(
-            ([, price]) => price
-          ),
+      const color =
+        coinColors[item.coin] || "#3b82f6";
 
-          borderColor:
-            COIN_COLORS[coin] ||
-            "#3b82f6",
+      /*
+       * IMPORTANT:
+       *
+       * First cryptocurrency uses y.
+       * Second cryptocurrency uses y1.
+       *
+       * This prevents something like:
+       *
+       * Ethereum = $2,400
+       * Tether   = $1
+       *
+       * from making Tether disappear.
+       */
+      const axis =
+        chartType === "bar" && index === 1
+          ? "y1"
+          : "y";
 
-          backgroundColor: "transparent",
+      return {
+        label: item.coin,
+        data: prices,
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: 2,
 
-          borderWidth: 2,
+        yAxisID: axis,
 
-          pointRadius: 2,
+        tension: 0.35,
 
-          pointHoverRadius: 5,
+        pointRadius:
+          chartType === "bar" ? 0 : 2,
 
-          tension: 0.25,
+        pointHoverRadius: 4,
 
-          fill: false,
-        };
-      }
-    );
+        fill: false,
+
+        ...(chartType === "bar"
+          ? {
+              borderRadius: 2,
+              barPercentage: 0.75,
+              categoryPercentage: 0.65,
+            }
+          : {}),
+      };
+    });
 
     return {
       labels,
       datasets,
     };
-  }, [
-    rawData,
-    chartType,
-    activeRange,
-  ]);
+  }, [chartData, activeRange, chartType]);
 
-  /*
-    Chart options
-  */
-  const options = useMemo(() => {
-    const isBar = chartType === "bar";
+  const formatAxisValue = (value) => {
+    const absolute = Math.abs(value);
 
-    return {
-      responsive: true,
+    if (absolute >= 1000000000) {
+      return `${currency.toUpperCase()} ${(value / 1000000000).toFixed(1)}B`;
+    }
 
-      maintainAspectRatio: false,
+    if (absolute >= 1000000) {
+      return `${currency.toUpperCase()} ${(value / 1000000).toFixed(1)}M`;
+    }
 
-      interaction: {
-        mode: "index",
-        intersect: false,
+    if (absolute >= 1000) {
+      return `${currency.toUpperCase()} ${(value / 1000).toFixed(1)}K`;
+    }
+
+    if (absolute < 10) {
+      return `${currency.toUpperCase()} ${value.toFixed(2)}`;
+    }
+
+    return `${currency.toUpperCase()} ${Math.round(value)}`;
+  };
+
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+
+    interaction: {
+      mode: "index",
+      intersect: false,
+    },
+
+    plugins: {
+      legend: {
+        position: "top",
+        align: "end",
+
+        labels: {
+          usePointStyle: true,
+          pointStyle: "circle",
+          boxWidth: 8,
+          boxHeight: 8,
+          padding: 14,
+
+          font: {
+            size: 10,
+          },
+
+          color: "#64748b",
+        },
       },
 
-      plugins: {
-        legend: {
+      tooltip: {
+        callbacks: {
+          label: (context) => {
+            const value = context.parsed.y;
+
+            if (value === null || value === undefined) {
+              return context.dataset.label;
+            }
+
+            return `${context.dataset.label}: ${formatAxisValue(
+              value
+            )}`;
+          },
+        },
+      },
+    },
+
+    scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+
+        ticks: {
+          color: "#64748b",
+          font: {
+            size: 10,
+          },
+        },
+      },
+
+      y: {
+        position: "left",
+
+        beginAtZero: false,
+
+        grid: {
+          color: "#e5e7eb",
+        },
+
+        title: {
+          display: true,
+          text: currency.toUpperCase(),
+
+          color: "#334155",
+
+          font: {
+            size: 10,
+            weight: "600",
+          },
+        },
+
+        ticks: {
+          color: "#64748b",
+
+          font: {
+            size: 9,
+          },
+
+          callback: (value) =>
+            formatAxisValue(value),
+        },
+      },
+
+      /*
+       * SECOND Y AXIS
+       *
+       * Only really matters when two coins
+       * have very different prices.
+       */
+      y1: {
+        position: "right",
+
+        display: selectedCoins.length > 1,
+
+        beginAtZero: false,
+
+        grid: {
+          drawOnChartArea: false,
+        },
+
+        title: {
           display: selectedCoins.length > 1,
+          text:
+            selectedCoins.length > 1
+              ? selectedCoins[1].toUpperCase()
+              : "",
 
-          position: "top",
+          color: "#64748b",
 
-          labels: {
-            usePointStyle: true,
-
-            pointStyle: "circle",
-
-            boxWidth: 8,
-
-            boxHeight: 8,
-
-            padding: 12,
-
-            font: {
-              size: 11,
-            },
+          font: {
+            size: 10,
+            weight: "600",
           },
         },
 
-        tooltip: {
-          callbacks: {
-            label: (context) => {
-              const value =
-                context.parsed.y;
+        ticks: {
+          color: "#64748b",
 
-              return `${context.dataset.label}: ${formatCurrency(
-                value,
-                currency
-              )}`;
-            },
+          font: {
+            size: 9,
           },
+
+          callback: (value) =>
+            formatAxisValue(value),
         },
       },
-
-      scales: {
-        x: {
-          stacked: false,
-
-          grid: {
-            display: false,
-          },
-
-          ticks: {
-            color: "#6b7280",
-
-            font: {
-              size: 10,
-            },
-
-            maxTicksLimit: isBar
-              ? 8
-              : activeRange === "1D"
-              ? 8
-              : 7,
-          },
-        },
-
-        y: {
-          beginAtZero: isBar,
-
-          stacked: false,
-
-          grid: {
-            color: "#f1f5f9",
-          },
-
-          title: {
-            display: true,
-
-            text: currency.toUpperCase(),
-
-            color: "#374151",
-
-            font: {
-              size: 10,
-
-              weight: "600",
-            },
-          },
-
-          ticks: {
-            color: "#6b7280",
-
-            font: {
-              size: 10,
-            },
-
-            callback: (value) => {
-              return Number(value).toLocaleString(
-                undefined,
-                {
-                  maximumFractionDigits: 0,
-                }
-              );
-            },
-          },
-        },
-      },
-    };
-  }, [
-    chartType,
-    selectedCoins.length,
-    activeRange,
-    currency,
-  ]);
+    },
+  };
 
   if (loading) {
     return (
-      <div className="flex h-[300px] w-full items-center justify-center text-sm text-gray-400">
-        Loading chart...
+      <div className="flex h-[300px] w-full items-center justify-center">
+        <span className="text-xs text-gray-400">
+          Loading chart data...
+        </span>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-[300px] w-full items-center justify-center text-sm text-red-400">
-        {error}
+      <div className="flex h-[300px] w-full items-center justify-center">
+        <span className="text-xs text-red-500">
+          {error}
+        </span>
       </div>
     );
   }
 
-  if (
-    !chartData ||
-    !chartData.labels ||
-    chartData.datasets.length === 0
-  ) {
+  if (!processed.labels.length) {
     return (
-      <div className="flex h-[300px] w-full items-center justify-center text-sm text-gray-400">
-        No chart data available.
+      <div className="flex h-[300px] w-full items-center justify-center">
+        <span className="text-xs text-gray-400">
+          No chart data available.
+        </span>
       </div>
     );
   }
@@ -594,12 +453,12 @@ function PriceChart({
     <div className="h-[300px] w-full">
       {chartType === "bar" ? (
         <Bar
-          data={chartData}
+          data={processed}
           options={options}
         />
       ) : (
         <Line
-          data={chartData}
+          data={processed}
           options={options}
         />
       )}
