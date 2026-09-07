@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -10,9 +9,7 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
-
 import { Line, Bar } from "react-chartjs-2";
-
 import { getCoinMarketChart } from "../services/coinGeckoApi";
 
 ChartJS.register(
@@ -25,7 +22,7 @@ ChartJS.register(
   Legend
 );
 
-const coinIds = {
+const COIN_IDS = {
   Bitcoin: "bitcoin",
   Ethereum: "ethereum",
   Tether: "tether",
@@ -33,15 +30,15 @@ const coinIds = {
   Binance: "binancecoin",
 };
 
-const coinColors = {
-  Bitcoin: "#f59e0b",
+const COIN_COLORS = {
+  Bitcoin: "#f7931a",
   Ethereum: "#3b82f6",
   Tether: "#10b981",
   XRP: "#8b5cf6",
-  Binance: "#eab308",
+  Binance: "#f59e0b",
 };
 
-const rangeDays = {
+const RANGE_DAYS = {
   "1D": 1,
   "1W": 7,
   "1M": 30,
@@ -49,208 +46,224 @@ const rangeDays = {
   "1Y": 365,
 };
 
+function getRangeDays(activeRange) {
+  return RANGE_DAYS[activeRange] || 7;
+}
+
+function formatCurrency(value, currency) {
+  if (value === null || value === undefined) {
+    return "N/A";
+  }
+
+  return `${Number(value).toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+  })} ${currency.toUpperCase()}`;
+}
+
+/*
+  Reduce line-chart points so the chart remains readable.
+*/
+function reduceLinePoints(points, activeRange) {
+  if (!points || points.length === 0) {
+    return [];
+  }
+
+  let maxPoints = 50;
+
+  if (activeRange === "1D") {
+    maxPoints = 24;
+  }
+
+  if (activeRange === "1W") {
+    maxPoints = 35;
+  }
+
+  if (activeRange === "1M") {
+    maxPoints = 31;
+  }
+
+  if (activeRange === "6M") {
+    maxPoints = 30;
+  }
+
+  if (activeRange === "1Y") {
+    maxPoints = 40;
+  }
+
+  const step = Math.max(
+    1,
+    Math.ceil(points.length / maxPoints)
+  );
+
+  return points.filter(
+    (_, index) => index % step === 0
+  );
+}
+
+/*
+  Create clean labels for the bar chart.
+
+  The bar chart uses monthly buckets for longer
+  ranges, giving the clean Jan / Feb / Mar style
+  shown in your reference image.
+*/
+function createBarBuckets(points, activeRange) {
+  if (!points || points.length === 0) {
+    return [];
+  }
+
+  const buckets = {};
+
+  points.forEach(([timestamp, price]) => {
+    const date = new Date(timestamp);
+
+    let key;
+
+    if (
+      activeRange === "6M" ||
+      activeRange === "1Y"
+    ) {
+      key = `${date.getFullYear()}-${date.getMonth()}`;
+    } else if (activeRange === "1M") {
+      key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    } else {
+      key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    }
+
+    if (!buckets[key]) {
+      buckets[key] = {
+        timestamp,
+        values: [],
+      };
+    }
+
+    buckets[key].values.push(price);
+  });
+
+  return Object.values(buckets).map((bucket) => {
+    const average =
+      bucket.values.reduce(
+        (sum, value) => sum + value,
+        0
+      ) / bucket.values.length;
+
+    return {
+      timestamp: bucket.timestamp,
+      value: average,
+    };
+  });
+}
+
+function formatBarLabel(timestamp, activeRange) {
+  const date = new Date(timestamp);
+
+  if (
+    activeRange === "6M" ||
+    activeRange === "1Y"
+  ) {
+    return date.toLocaleDateString([], {
+      month: "short",
+    });
+  }
+
+  if (activeRange === "1M") {
+    return date.toLocaleDateString([], {
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  return date.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function PriceChart({
-  chartType = "line",
-  selectedCoins = ["Ethereum"],
-  activeRange = "1W",
+  chartType,
+  selectedCoins,
+  activeRange,
   currency = "usd",
 }) {
-  const [chartData, setChartData] = useState(null);
+  const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  /*
+    Fetch data whenever:
+    - cryptocurrency selection changes
+    - range changes
+    - currency changes
+  */
   useEffect(() => {
     let cancelled = false;
 
-    const loadChartData = async () => {
-      if (!selectedCoins.length) {
-        setChartData(null);
-        setLoading(false);
-        setError("");
+    const loadCharts = async () => {
+      if (
+        !selectedCoins ||
+        selectedCoins.length === 0
+      ) {
         return;
       }
 
-      setLoading(true);
-      setError("");
-      setChartData(null);
-
       try {
-        const days = rangeDays[activeRange] || 7;
+        setLoading(true);
+        setError("");
+
+        const days = getRangeDays(activeRange);
 
         const results = await Promise.all(
-          selectedCoins.map(async (coinName) => {
-            const coinId = coinIds[coinName];
+          selectedCoins.map(async (coin) => {
+            const coinId = COIN_IDS[coin];
 
             if (!coinId) {
-              return null;
+              return {
+                coin,
+                data: null,
+              };
             }
 
-            const result = await getCoinMarketChart(
-              coinId,
-              currency,
-              days
-            );
+            const data =
+              await getCoinMarketChart(
+                coinId,
+                currency,
+                days
+              );
 
             return {
-              name: coinName,
-              coinId,
-              data: result,
+              coin,
+              data,
             };
           })
         );
 
-        if (cancelled) return;
-
-        const validResults = results.filter(
-          (result) =>
-            result?.data?.prices &&
-            result.data.prices.length > 0
-        );
-
-        if (!validResults.length) {
-          setError("No chart data was returned.");
-          setChartData(null);
+        if (cancelled) {
           return;
         }
 
-        /*
-         * Create a common timestamp list from all selected
-         * cryptocurrencies.
-         */
-        const timestampSet = new Set();
-
-        validResults.forEach((result) => {
-          result.data.prices.forEach(([timestamp]) => {
-            timestampSet.add(timestamp);
-          });
-        });
-
-        const timestamps = Array.from(timestampSet).sort(
-          (a, b) => a - b
+        const validResults = results.filter(
+          (result) =>
+            result.data &&
+            result.data.prices &&
+            result.data.prices.length > 0
         );
 
-        /*
-         * Limit the number of visible points for longer
-         * ranges so the chart stays responsive.
-         */
-        let displayTimestamps = timestamps;
-
-        if (activeRange === "6M" && timestamps.length > 90) {
-          const step = Math.ceil(timestamps.length / 90);
-
-          displayTimestamps = timestamps.filter(
-            (_, index) => index % step === 0
-          );
+        if (validResults.length === 0) {
+          setError("Unable to load chart data.");
+          setRawData([]);
+          return;
         }
 
-        if (activeRange === "1Y" && timestamps.length > 100) {
-          const step = Math.ceil(timestamps.length / 100);
-
-          displayTimestamps = timestamps.filter(
-            (_, index) => index % step === 0
-          );
-        }
-
-        const labels = displayTimestamps.map(
-          (timestamp) =>
-            new Date(timestamp).toLocaleDateString(
-              [],
-              {
-                month: "short",
-                day: "numeric",
-              }
-            )
-        );
-
-        /*
-         * Create one lookup table for every cryptocurrency.
-         * This prevents values from being matched only by
-         * array position.
-         */
-        const datasets = validResults.map((result) => {
-          const priceMap = new Map(
-            result.data.prices.map(
-              ([timestamp, price]) => [
-                timestamp,
-                price,
-              ]
-            )
-          );
-
-          const data = displayTimestamps.map(
-            (timestamp) => {
-              if (priceMap.has(timestamp)) {
-                return priceMap.get(timestamp);
-              }
-
-              /*
-               * If the exact timestamp isn't available,
-               * find the closest previous price.
-               */
-              let closestPrice = null;
-
-              for (let i = timestamps.length - 1; i >= 0; i--) {
-                const previousTimestamp =
-                  timestamps[i];
-
-                if (previousTimestamp <= timestamp) {
-                  closestPrice =
-                    priceMap.get(previousTimestamp) ??
-                    null;
-                  break;
-                }
-              }
-
-              return closestPrice;
-            }
-          );
-
-          return {
-            label: result.name,
-
-            data,
-
-            borderColor:
-              coinColors[result.name] ||
-              "#3b82f6",
-
-            backgroundColor:
-              coinColors[result.name] ||
-              "#3b82f6",
-
-            borderWidth: 2,
-
-            tension: 0.3,
-
-            pointRadius:
-              activeRange === "1D" ? 1 : 2,
-
-            pointHoverRadius: 5,
-
-            fill: false,
-
-            barPercentage: 0.65,
-
-            categoryPercentage: 0.75,
-          };
-        });
-
-        setChartData({
-          labels,
-          datasets,
-        });
+        setRawData(validResults);
       } catch (err) {
         console.error(
-          "Chart data error:",
+          "Price Chart Error:",
           err
         );
 
         if (!cancelled) {
-          setError(
-            "Unable to load cryptocurrency data."
-          );
-
-          setChartData(null);
+          setError("Unable to load chart data.");
+          setRawData([]);
         }
       } finally {
         if (!cancelled) {
@@ -259,156 +272,337 @@ function PriceChart({
       }
     };
 
-    loadChartData();
+    loadCharts();
 
     return () => {
       cancelled = true;
     };
-  }, [selectedCoins, activeRange, currency]);
+  }, [
+    selectedCoins,
+    activeRange,
+    currency,
+  ]);
 
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
+  /*
+    Build the chart data.
+  */
+  const chartData = useMemo(() => {
+    if (!rawData.length) {
+      return null;
+    }
 
-    interaction: {
-      mode: "index",
-      intersect: false,
-    },
+    /*
+      BAR CHART
+    */
+    if (chartType === "bar") {
+      const allBuckets = [];
 
-    plugins: {
-      legend: {
-        display: selectedCoins.length > 1,
-        position: "top",
+      rawData.forEach(({ data }) => {
+        const buckets = createBarBuckets(
+          data.prices,
+          activeRange
+        );
 
-        labels: {
-          usePointStyle: true,
-          boxWidth: 8,
+        buckets.forEach((bucket) => {
+          const label = formatBarLabel(
+            bucket.timestamp,
+            activeRange
+          );
 
-          font: {
-            size: 11,
-          },
-        },
-      },
+          if (!allBuckets.includes(label)) {
+            allBuckets.push(label);
+          }
+        });
+      });
 
-      tooltip: {
-        callbacks: {
-          title: (items) => {
-            return items[0]?.label || "";
-          },
+      const datasets = rawData.map(
+        ({ coin, data }) => {
+          const buckets = createBarBuckets(
+            data.prices,
+            activeRange
+          );
 
-          label: (context) => {
-            const value = context.parsed.y;
+          const bucketMap = {};
 
-            if (typeof value !== "number") {
-              return `${context.dataset.label}: -`;
-            }
+          buckets.forEach((bucket) => {
+            const label = formatBarLabel(
+              bucket.timestamp,
+              activeRange
+            );
 
-            return `${context.dataset.label}: ${value.toLocaleString(
-              undefined,
-              {
-                maximumFractionDigits: 2,
-              }
-            )} ${currency.toUpperCase()}`;
-          },
-        },
-      },
-    },
+            bucketMap[label] = bucket.value;
+          });
 
-    scales: {
-      x: {
-        grid: {
-          display: false,
-        },
+          return {
+            label: coin,
 
-        ticks: {
-          maxTicksLimit: 7,
-
-          font: {
-            size: 10,
-          },
-        },
-      },
-
-      y: {
-        beginAtZero: false,
-
-        grid: {
-          color: "#f1f5f9",
-        },
-
-        ticks: {
-          font: {
-            size: 10,
-          },
-
-          callback: (value) =>
-            Number(value).toLocaleString(
-              undefined,
-              {
-                maximumFractionDigits: 0,
-              }
+            data: allBuckets.map(
+              (label) =>
+                bucketMap[label] ?? null
             ),
+
+            backgroundColor:
+              COIN_COLORS[coin] ||
+              "#3b82f6",
+
+            borderColor:
+              COIN_COLORS[coin] ||
+              "#3b82f6",
+
+            borderWidth: 0,
+
+            borderRadius: 2,
+
+            barPercentage: 0.7,
+
+            categoryPercentage: 0.65,
+          };
+        }
+      );
+
+      return {
+        labels: allBuckets,
+        datasets,
+      };
+    }
+
+    /*
+      LINE CHART
+    */
+    const referencePoints =
+      reduceLinePoints(
+        rawData[0].data.prices,
+        activeRange
+      );
+
+    const labels = referencePoints.map(
+      ([timestamp]) => {
+        const date = new Date(timestamp);
+
+        if (activeRange === "1D") {
+          return date.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        }
+
+        return date.toLocaleDateString([], {
+          month: "short",
+          day: "numeric",
+        });
+      }
+    );
+
+    const datasets = rawData.map(
+      ({ coin, data }) => {
+        const points = reduceLinePoints(
+          data.prices,
+          activeRange
+        );
+
+        return {
+          label: coin,
+
+          data: points.map(
+            ([, price]) => price
+          ),
+
+          borderColor:
+            COIN_COLORS[coin] ||
+            "#3b82f6",
+
+          backgroundColor: "transparent",
+
+          borderWidth: 2,
+
+          pointRadius: 2,
+
+          pointHoverRadius: 5,
+
+          tension: 0.25,
+
+          fill: false,
+        };
+      }
+    );
+
+    return {
+      labels,
+      datasets,
+    };
+  }, [
+    rawData,
+    chartType,
+    activeRange,
+  ]);
+
+  /*
+    Chart options
+  */
+  const options = useMemo(() => {
+    const isBar = chartType === "bar";
+
+    return {
+      responsive: true,
+
+      maintainAspectRatio: false,
+
+      interaction: {
+        mode: "index",
+        intersect: false,
+      },
+
+      plugins: {
+        legend: {
+          display: selectedCoins.length > 1,
+
+          position: "top",
+
+          labels: {
+            usePointStyle: true,
+
+            pointStyle: "circle",
+
+            boxWidth: 8,
+
+            boxHeight: 8,
+
+            padding: 12,
+
+            font: {
+              size: 11,
+            },
+          },
+        },
+
+        tooltip: {
+          callbacks: {
+            label: (context) => {
+              const value =
+                context.parsed.y;
+
+              return `${context.dataset.label}: ${formatCurrency(
+                value,
+                currency
+              )}`;
+            },
+          },
         },
       },
-    },
-  };
+
+      scales: {
+        x: {
+          stacked: false,
+
+          grid: {
+            display: false,
+          },
+
+          ticks: {
+            color: "#6b7280",
+
+            font: {
+              size: 10,
+            },
+
+            maxTicksLimit: isBar
+              ? 8
+              : activeRange === "1D"
+              ? 8
+              : 7,
+          },
+        },
+
+        y: {
+          beginAtZero: isBar,
+
+          stacked: false,
+
+          grid: {
+            color: "#f1f5f9",
+          },
+
+          title: {
+            display: true,
+
+            text: currency.toUpperCase(),
+
+            color: "#374151",
+
+            font: {
+              size: 10,
+
+              weight: "600",
+            },
+          },
+
+          ticks: {
+            color: "#6b7280",
+
+            font: {
+              size: 10,
+            },
+
+            callback: (value) => {
+              return Number(value).toLocaleString(
+                undefined,
+                {
+                  maximumFractionDigits: 0,
+                }
+              );
+            },
+          },
+        },
+      },
+    };
+  }, [
+    chartType,
+    selectedCoins.length,
+    activeRange,
+    currency,
+  ]);
 
   if (loading) {
     return (
-      <div className="flex h-[300px] items-center justify-center">
-        <p className="text-sm text-gray-400">
-          Loading market data...
-        </p>
+      <div className="flex h-[300px] w-full items-center justify-center text-sm text-gray-400">
+        Loading chart...
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-[300px] items-center justify-center">
-        <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-500">
-          {error}
-        </p>
+      <div className="flex h-[300px] w-full items-center justify-center text-sm text-red-400">
+        {error}
       </div>
     );
   }
 
-  if (!chartData) {
+  if (
+    !chartData ||
+    !chartData.labels ||
+    chartData.datasets.length === 0
+  ) {
     return (
-      <div className="flex h-[300px] items-center justify-center">
-        <p className="text-sm text-gray-400">
-          Select a cryptocurrency.
-        </p>
-      </div>
-    );
-  }
-
-  const finalOptions = {
-    ...options,
-
-    indexAxis:
-      chartType === "bar-chart-horizontal"
-        ? "y"
-        : "x",
-  };
-
-  if (chartType === "line") {
-    return (
-      <div className="h-[300px] w-full">
-        <Line
-          data={chartData}
-          options={finalOptions}
-        />
+      <div className="flex h-[300px] w-full items-center justify-center text-sm text-gray-400">
+        No chart data available.
       </div>
     );
   }
 
   return (
     <div className="h-[300px] w-full">
-      <Bar
-        data={chartData}
-        options={finalOptions}
-      />
+      {chartType === "bar" ? (
+        <Bar
+          data={chartData}
+          options={options}
+        />
+      ) : (
+        <Line
+          data={chartData}
+          options={options}
+        />
+      )}
     </div>
   );
 }
