@@ -23,6 +23,10 @@ ChartJS.register(
   Legend
 );
 
+/* =====================================================
+   COIN IDS
+===================================================== */
+
 const coinIds = {
   Bitcoin: "bitcoin",
   Ethereum: "ethereum",
@@ -30,6 +34,10 @@ const coinIds = {
   XRP: "ripple",
   Binance: "binancecoin",
 };
+
+/* =====================================================
+   COIN COLORS
+===================================================== */
 
 const coinColors = {
   Bitcoin: "#f59e0b",
@@ -39,6 +47,10 @@ const coinColors = {
   Binance: "#eab308",
 };
 
+/* =====================================================
+   RANGE
+===================================================== */
+
 const rangeDays = {
   "1D": 1,
   "1W": 7,
@@ -47,34 +59,51 @@ const rangeDays = {
   "1Y": 365,
 };
 
+/* =====================================================
+   PRICE CHART
+===================================================== */
+
 function PriceChart({
   chartType = "line",
   selectedCoins = ["Ethereum"],
   activeRange = "1W",
   currency = "usd",
 }) {
-  const [chartData, setChartData] = useState([]);
+  const [coinData, setCoinData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  /* ===================================================
+     FETCH DATA
+  =================================================== */
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadCharts = async () => {
+    const loadData = async () => {
       if (!selectedCoins || selectedCoins.length === 0) {
-        setChartData([]);
-        setError("Select at least one cryptocurrency.");
+        setCoinData([]);
+        setError("Please select a cryptocurrency.");
         setLoading(false);
         return;
       }
 
-      try {
-        setLoading(true);
-        setError("");
+      setLoading(true);
+      setError("");
 
+      try {
         const days = rangeDays[activeRange] || 7;
 
-        const responses = await Promise.all(
+        /*
+         * Fetch each selected cryptocurrency separately.
+         *
+         * IMPORTANT:
+         * We preserve the coin name together with its
+         * response so Ethereum can never accidentally
+         * receive Bitcoin's data.
+         */
+
+        const results = await Promise.all(
           selectedCoins.map(async (coin) => {
             const coinId = coinIds[coin];
 
@@ -85,7 +114,7 @@ function PriceChart({
               };
             }
 
-            const data = await getCoinMarketChart(
+            const response = await getCoinMarketChart(
               coinId,
               currency,
               days
@@ -93,29 +122,32 @@ function PriceChart({
 
             return {
               coin,
-              prices: data?.prices || [],
+              coinId,
+              prices: Array.isArray(response?.prices)
+                ? response.prices
+                : [],
             };
           })
         );
 
         if (cancelled) return;
 
-        const validData = responses.filter(
+        const validResults = results.filter(
           (item) => item.prices.length > 0
         );
 
-        if (validData.length === 0) {
-          setChartData([]);
+        if (validResults.length === 0) {
+          setCoinData([]);
           setError("Unable to load chart data.");
           return;
         }
 
-        setChartData(validData);
+        setCoinData(validResults);
       } catch (err) {
-        console.error("Chart Error:", err);
+        console.error("Price chart error:", err);
 
         if (!cancelled) {
-          setChartData([]);
+          setCoinData([]);
           setError("Unable to load chart data.");
         }
       } finally {
@@ -125,67 +157,112 @@ function PriceChart({
       }
     };
 
-    loadCharts();
+    loadData();
 
     return () => {
       cancelled = true;
     };
   }, [selectedCoins, activeRange, currency]);
 
-  /*
-   * Convert CoinGecko's many timestamp points into
-   * a smaller number of readable points.
-   *
-   * This gives the graph the clean appearance
-   * from your 3rd screenshot.
-   */
-  const processed = useMemo(() => {
-    if (!chartData.length) {
+  /* ===================================================
+     BUILD CHART DATA
+  =================================================== */
+
+  const processedData = useMemo(() => {
+    if (!coinData.length) {
       return {
         labels: [],
         datasets: [],
       };
     }
 
-    const longest = Math.max(
-      ...chartData.map((item) => item.prices.length)
+    /*
+     * Use the longest dataset as our timeline.
+     */
+    const longestLength = Math.max(
+      ...coinData.map((item) => item.prices.length)
     );
 
-    const pointCount =
-      activeRange === "1D"
-        ? 12
-        : activeRange === "1W"
-        ? 7
-        : activeRange === "1M"
-        ? 6
-        : activeRange === "6M"
-        ? 6
-        : 6;
+    /*
+     * Number of visible points.
+     *
+     * We reduce the number of points for readability,
+     * but do NOT change the actual price values.
+     */
+    let pointCount = 12;
 
-    const indexes = [];
-
-    for (let i = 0; i < pointCount; i++) {
-      const index = Math.round(
-        (i * (longest - 1)) / (pointCount - 1 || 1)
-      );
-
-      indexes.push(index);
+    if (activeRange === "1D") {
+      pointCount = 12;
     }
 
+    if (activeRange === "1W") {
+      pointCount = 12;
+    }
+
+    if (activeRange === "1M") {
+      pointCount = 10;
+    }
+
+    if (activeRange === "6M") {
+      pointCount = 12;
+    }
+
+    if (activeRange === "1Y") {
+      pointCount = 12;
+    }
+
+    pointCount = Math.min(
+      pointCount,
+      longestLength
+    );
+
+    /*
+     * Pick evenly spaced indexes.
+     */
+    const indexes = [];
+
+    if (pointCount === 1) {
+      indexes.push(0);
+    } else {
+      for (let i = 0; i < pointCount; i++) {
+        const index = Math.round(
+          (i * (longestLength - 1)) /
+            (pointCount - 1)
+        );
+
+        indexes.push(index);
+      }
+    }
+
+    /* =================================================
+       LABELS
+    ================================================= */
+
     const labels = indexes.map((index) => {
-      const firstCoin = chartData[0];
-
       const timestamp =
-        firstCoin.prices[index]?.[0];
+        coinData[0]?.prices[index]?.[0];
 
-      if (!timestamp) return "";
+      if (!timestamp) {
+        return "";
+      }
 
       const date = new Date(timestamp);
 
-      if (
-        activeRange === "1D" ||
-        activeRange === "1W"
-      ) {
+      if (activeRange === "1D") {
+        return date.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      }
+
+      if (activeRange === "1W") {
+        return date.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+      }
+
+      if (activeRange === "1M") {
         return date.toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
@@ -197,92 +274,156 @@ function PriceChart({
       });
     });
 
-    const datasets = chartData.map((item, index) => {
-      const prices = indexes.map(
-        (pointIndex) =>
-          item.prices[pointIndex]?.[1] ?? null
-      );
+    /* =================================================
+       DATASETS
+    ================================================= */
 
-      const color =
-        coinColors[item.coin] || "#3b82f6";
+    const datasets = coinData.map(
+      (item, index) => {
+        const color =
+          coinColors[item.coin] || "#3b82f6";
 
-      /*
-       * IMPORTANT:
-       *
-       * First cryptocurrency uses y.
-       * Second cryptocurrency uses y1.
-       *
-       * This prevents something like:
-       *
-       * Ethereum = $2,400
-       * Tether   = $1
-       *
-       * from making Tether disappear.
-       */
-      const axis =
-        chartType === "bar" && index === 1
-          ? "y1"
-          : "y";
+        /*
+         * FIRST COIN:
+         * left Y axis
+         *
+         * SECOND COIN:
+         * right Y axis
+         *
+         * Both axes are REAL currency values.
+         */
 
-      return {
-        label: item.coin,
-        data: prices,
-        borderColor: color,
-        backgroundColor: color,
-        borderWidth: 2,
+        const yAxisId =
+          index === 0 ? "y" : "y1";
 
-        yAxisID: axis,
+        const values = indexes.map(
+          (pointIndex) => {
+            const value =
+              item.prices[pointIndex]?.[1];
 
-        tension: 0.35,
-
-        pointRadius:
-          chartType === "bar" ? 0 : 2,
-
-        pointHoverRadius: 4,
-
-        fill: false,
-
-        ...(chartType === "bar"
-          ? {
-              borderRadius: 2,
-              barPercentage: 0.75,
-              categoryPercentage: 0.65,
+            if (
+              value === null ||
+              value === undefined ||
+              !Number.isFinite(Number(value))
+            ) {
+              return null;
             }
-          : {}),
-      };
-    });
+
+            return Number(value);
+          }
+        );
+
+        return {
+          label: item.coin,
+
+          data: values,
+
+          yAxisID: yAxisId,
+
+          borderColor: color,
+
+          backgroundColor: color,
+
+          borderWidth: 2,
+
+          tension: 0.3,
+
+          pointRadius:
+            chartType === "bar" ? 0 : 2,
+
+          pointHoverRadius: 5,
+
+          pointBackgroundColor: color,
+
+          pointBorderColor: color,
+
+          fill: false,
+
+          /*
+           * BAR SETTINGS
+           */
+          ...(chartType === "bar"
+            ? {
+                borderRadius: 3,
+
+                barPercentage: 0.7,
+
+                categoryPercentage: 0.7,
+              }
+            : {}),
+        };
+      }
+    );
 
     return {
       labels,
       datasets,
     };
-  }, [chartData, activeRange, chartType]);
+  }, [
+    coinData,
+    activeRange,
+    chartType,
+  ]);
 
-  const formatAxisValue = (value) => {
-    const absolute = Math.abs(value);
+  /* ===================================================
+     FORMAT VALUES
+  =================================================== */
 
-    if (absolute >= 1000000000) {
-      return `${currency.toUpperCase()} ${(value / 1000000000).toFixed(1)}B`;
+  const formatCurrency = (value) => {
+    if (
+      value === null ||
+      value === undefined ||
+      !Number.isFinite(Number(value))
+    ) {
+      return "";
     }
 
-    if (absolute >= 1000000) {
-      return `${currency.toUpperCase()} ${(value / 1000000).toFixed(1)}M`;
+    const numericValue = Number(value);
+
+    const currencyCode =
+      currency.toUpperCase();
+
+    if (Math.abs(numericValue) >= 1000000000) {
+      return `${currencyCode} ${(
+        numericValue / 1000000000
+      ).toFixed(1)}B`;
     }
 
-    if (absolute >= 1000) {
-      return `${currency.toUpperCase()} ${(value / 1000).toFixed(1)}K`;
+    if (Math.abs(numericValue) >= 1000000) {
+      return `${currencyCode} ${(
+        numericValue / 1000000
+      ).toFixed(1)}M`;
     }
 
-    if (absolute < 10) {
-      return `${currency.toUpperCase()} ${value.toFixed(2)}`;
+    if (Math.abs(numericValue) >= 1000) {
+      return `${currencyCode} ${(
+        numericValue / 1000
+      ).toFixed(1)}K`;
     }
 
-    return `${currency.toUpperCase()} ${Math.round(value)}`;
+    if (Math.abs(numericValue) < 10) {
+      return `${currencyCode} ${numericValue.toFixed(
+        2
+      )}`;
+    }
+
+    return `${currencyCode} ${Math.round(
+      numericValue
+    ).toLocaleString()}`;
   };
+
+  /* ===================================================
+     CHART OPTIONS
+  =================================================== */
 
   const options = {
     responsive: true,
+
     maintainAspectRatio: false,
+
+    animation: {
+      duration: 300,
+    },
 
     interaction: {
       mode: "index",
@@ -292,33 +433,35 @@ function PriceChart({
     plugins: {
       legend: {
         position: "top",
+
         align: "end",
 
         labels: {
           usePointStyle: true,
+
           pointStyle: "circle",
+
           boxWidth: 8,
+
           boxHeight: 8,
+
           padding: 14,
 
-          font: {
-            size: 10,
-          },
-
           color: "#64748b",
+
+          font: {
+            size: 11,
+          },
         },
       },
 
       tooltip: {
         callbacks: {
           label: (context) => {
-            const value = context.parsed.y;
+            const value =
+              context.parsed.y;
 
-            if (value === null || value === undefined) {
-              return context.dataset.label;
-            }
-
-            return `${context.dataset.label}: ${formatAxisValue(
+            return `${context.dataset.label}: ${formatCurrency(
               value
             )}`;
           },
@@ -327,36 +470,35 @@ function PriceChart({
     },
 
     scales: {
-      x: {
-        grid: {
-          display: false,
-        },
-
-        ticks: {
-          color: "#64748b",
-          font: {
-            size: 10,
-          },
-        },
-      },
+      /* ===============================================
+         LEFT AXIS
+      =============================================== */
 
       y: {
+        type: "linear",
+
         position: "left",
 
-        beginAtZero: false,
+        beginAtZero: true,
 
         grid: {
           color: "#e5e7eb",
         },
 
+        border: {
+          display: false,
+        },
+
         title: {
           display: true,
+
           text: currency.toUpperCase(),
 
           color: "#334155",
 
           font: {
-            size: 10,
+            size: 11,
+
             weight: "600",
           },
         },
@@ -365,42 +507,52 @@ function PriceChart({
           color: "#64748b",
 
           font: {
-            size: 9,
+            size: 10,
           },
 
           callback: (value) =>
-            formatAxisValue(value),
+            formatCurrency(value),
         },
       },
 
-      /*
-       * SECOND Y AXIS
-       *
-       * Only really matters when two coins
-       * have very different prices.
-       */
+      /* ===============================================
+         RIGHT AXIS
+      =============================================== */
+
       y1: {
+        type: "linear",
+
         position: "right",
 
-        display: selectedCoins.length > 1,
+        beginAtZero: true,
 
-        beginAtZero: false,
+        display:
+          selectedCoins.length > 1,
 
         grid: {
           drawOnChartArea: false,
         },
 
-        title: {
-          display: selectedCoins.length > 1,
-          text:
-            selectedCoins.length > 1
-              ? selectedCoins[1].toUpperCase()
-              : "",
+        border: {
+          display: false,
+        },
 
-          color: "#64748b",
+        title: {
+          display:
+            selectedCoins.length > 1,
+
+          /*
+           * IMPORTANT:
+           * This is USD / INR / EUR / GBP,
+           * NOT "BITCOIN".
+           */
+          text: currency.toUpperCase(),
+
+          color: "#334155",
 
           font: {
-            size: 10,
+            size: 11,
+
             weight: "600",
           },
         },
@@ -409,15 +561,43 @@ function PriceChart({
           color: "#64748b",
 
           font: {
-            size: 9,
+            size: 10,
           },
 
           callback: (value) =>
-            formatAxisValue(value),
+            formatCurrency(value),
+        },
+      },
+
+      /* ===============================================
+         X AXIS
+      =============================================== */
+
+      x: {
+        grid: {
+          display: false,
+        },
+
+        border: {
+          display: false,
+        },
+
+        ticks: {
+          color: "#64748b",
+
+          font: {
+            size: 10,
+          },
+
+          maxRotation: 0,
         },
       },
     },
   };
+
+  /* ===================================================
+     LOADING
+  =================================================== */
 
   if (loading) {
     return (
@@ -429,6 +609,10 @@ function PriceChart({
     );
   }
 
+  /* ===================================================
+     ERROR
+  =================================================== */
+
   if (error) {
     return (
       <div className="flex h-[300px] w-full items-center justify-center">
@@ -439,7 +623,14 @@ function PriceChart({
     );
   }
 
-  if (!processed.labels.length) {
+  /* ===================================================
+     EMPTY
+  =================================================== */
+
+  if (
+    !processedData.labels.length ||
+    !processedData.datasets.length
+  ) {
     return (
       <div className="flex h-[300px] w-full items-center justify-center">
         <span className="text-xs text-gray-400">
@@ -449,16 +640,20 @@ function PriceChart({
     );
   }
 
+  /* ===================================================
+     RENDER
+  =================================================== */
+
   return (
     <div className="h-[300px] w-full">
       {chartType === "bar" ? (
         <Bar
-          data={processed}
+          data={processedData}
           options={options}
         />
       ) : (
         <Line
-          data={processed}
+          data={processedData}
           options={options}
         />
       )}
