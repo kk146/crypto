@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 function ChartControls({
   chartType,
@@ -8,7 +8,8 @@ function ChartControls({
   selectedCoins,
   toggleCoin,
 }) {
-  const [isCryptoOpen, setIsCryptoOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
   const ranges = ["1D", "1W", "1M", "6M", "1Y"];
 
@@ -20,10 +21,37 @@ function ChartControls({
     "Binance",
   ];
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener(
+      "mousedown",
+      handleClickOutside
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleClickOutside
+      );
+    };
+  }, []);
+
+  const handleCoinClick = (coin) => {
+    toggleCoin(coin);
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* DATE RANGE */}
+        {/* RANGE BUTTONS */}
         <div className="flex flex-wrap gap-1.5">
           {ranges.map((range) => (
             <button
@@ -43,45 +71,78 @@ function ChartControls({
 
         {/* RIGHT CONTROLS */}
         <div className="flex items-center gap-2">
-          {/* CRYPTO DROPDOWN */}
-          <div className="relative">
+          {/* CRYPTO SELECTOR */}
+          <div
+            ref={dropdownRef}
+            className="relative"
+          >
             <button
               type="button"
-              onClick={() => setIsCryptoOpen((open) => !open)}
-              className="flex h-[32px] min-w-[170px] items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-xs text-gray-700"
+              onClick={() => setIsOpen((value) => !value)}
+              className="flex h-[32px] w-[180px] items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700"
             >
-              <span className="truncate">
+              <span>
                 {selectedCoins.length === 1
                   ? selectedCoins[0]
                   : `${selectedCoins.length} Cryptocurrencies`}
               </span>
 
-              <span className="ml-2 text-[10px] text-gray-500">
-                {isCryptoOpen ? "▲" : "▼"}
+              <span className="text-[10px] text-gray-500">
+                {isOpen ? "▲" : "▼"}
               </span>
             </button>
 
-            {isCryptoOpen && (
-              <div className="absolute right-0 top-[38px] z-50 w-[220px] rounded-md border border-gray-200 bg-white p-2 shadow-lg">
+            {isOpen && (
+              <div
+                className="absolute right-0 top-[38px] z-[9999] w-[220px] rounded-md border border-gray-200 bg-white p-2 shadow-xl"
+                style={{
+                  color: "#374151",
+                }}
+              >
                 {coins.map((coin) => {
-                  const selected = selectedCoins.includes(coin);
+                  const selected =
+                    selectedCoins.includes(coin);
 
                   return (
-                    <label
+                    <button
                       key={coin}
-                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50"
+                      type="button"
+                      onClick={() =>
+                        handleCoinClick(coin)
+                      }
+                      className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-left ${
+                        selected
+                          ? "bg-blue-50"
+                          : "bg-white hover:bg-gray-50"
+                      }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        onChange={() => toggleCoin(coin)}
-                        className="h-4 w-4"
-                      />
+                      {/* CUSTOM CHECKBOX */}
+                      <span
+                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                          selected
+                            ? "border-blue-500 bg-blue-500"
+                            : "border-gray-400 bg-white"
+                        }`}
+                      >
+                        {selected && (
+                          <span className="text-[11px] font-bold text-white">
+                            ✓
+                          </span>
+                        )}
+                      </span>
 
-                      <span className="text-xs font-medium text-gray-700">
+                      {/* COIN NAME */}
+                      <span
+                        className="text-xs font-medium"
+                        style={{
+                          color: "#374151",
+                          opacity: 1,
+                          visibility: "visible",
+                        }}
+                      >
                         {coin}
                       </span>
-                    </label>
+                    </button>
                   );
                 })}
               </div>
@@ -91,7 +152,9 @@ function ChartControls({
           {/* CHART TYPE */}
           <select
             value={chartType}
-            onChange={(e) => setChartType(e.target.value)}
+            onChange={(e) =>
+              setChartType(e.target.value)
+            }
             className="h-[32px] rounded-md border border-gray-200 bg-white px-3 text-xs text-gray-700 outline-none"
           >
             <option value="line">Line Chart</option>
@@ -100,7 +163,7 @@ function ChartControls({
         </div>
       </div>
 
-      {/* SELECTED COINS */}
+      {/* SELECTED */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-xs text-gray-400">
           Selected:
