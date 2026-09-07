@@ -1,8 +1,12 @@
 import axios from "axios";
 
-const BASE_URL = "https://api.coingecko.com/api/v3";
+const BASE_URL =
+  "https://api.coingecko.com/api/v3";
 
-// Optional API key support
+/* =====================================================
+   API CONFIG
+===================================================== */
+
 const apiConfig = {};
 
 if (import.meta.env.VITE_COINGECKO_API_KEY) {
@@ -12,19 +16,29 @@ if (import.meta.env.VITE_COINGECKO_API_KEY) {
   };
 }
 
-// Get top cryptocurrencies
-export const getTopCoins = async (currency = "usd") => {
+/* =====================================================
+   TOP COINS
+===================================================== */
+
+export const getTopCoins = async (
+  currency = "usd"
+) => {
   try {
     const response = await axios.get(
       `${BASE_URL}/coins/markets`,
       {
         params: {
-          vs_currency: currency,
+          vs_currency: currency.toLowerCase(),
+
           order: "market_cap_desc",
+
           per_page: 20,
+
           page: 1,
+
           sparkline: false,
         },
+
         ...apiConfig,
       }
     );
@@ -32,57 +46,109 @@ export const getTopCoins = async (currency = "usd") => {
     return response.data;
   } catch (error) {
     console.error(
-      "Error fetching coins:",
-      error
+      "Error fetching top coins:",
+      error?.response?.data || error
     );
 
     return [];
   }
 };
 
-// Get historical cryptocurrency prices
+/* =====================================================
+   COIN MARKET CHART
+===================================================== */
+
 export const getCoinMarketChart = async (
   coinId,
   currency = "usd",
   days = 7
 ) => {
   try {
+    /*
+     * Make sure these values are strings/numbers
+     * in exactly the format CoinGecko expects.
+     */
+
+    const cleanCoinId =
+      String(coinId).trim();
+
+    const cleanCurrency =
+      String(currency)
+        .trim()
+        .toLowerCase();
+
+    const cleanDays = Number(days);
+
+    console.log(
+      "Fetching chart:",
+      cleanCoinId,
+      cleanCurrency,
+      cleanDays
+    );
+
     const response = await axios.get(
-      `${BASE_URL}/coins/${coinId}/market_chart`,
+      `${BASE_URL}/coins/${cleanCoinId}/market_chart`,
       {
         params: {
-          vs_currency: currency,
-          days,
+          vs_currency: cleanCurrency,
+
+          days: cleanDays,
         },
+
         ...apiConfig,
       }
     );
+
+    /*
+     * Make sure we actually received price data.
+     */
+
+    if (
+      !response.data ||
+      !Array.isArray(response.data.prices)
+    ) {
+      console.error(
+        "Invalid CoinGecko chart response:",
+        response.data
+      );
+
+      return null;
+    }
 
     return response.data;
   } catch (error) {
     console.error(
       `Error fetching ${coinId} chart data:`,
-      error
+      error?.response?.data || error
     );
 
     return null;
   }
 };
 
-// Get current cryptocurrency exchange rates
+/* =====================================================
+   EXCHANGE RATE
+===================================================== */
+
 export const getExchangeRate = async (
   fromId,
-  toId,
-  currency = "usd"
+  toCurrency = "usd"
 ) => {
   try {
+    const cleanCurrency =
+      String(toCurrency)
+        .trim()
+        .toLowerCase();
+
     const response = await axios.get(
       `${BASE_URL}/simple/price`,
       {
         params: {
-          ids: `${fromId},${toId}`,
-          vs_currencies: currency,
+          ids: fromId,
+
+          vs_currencies: cleanCurrency,
         },
+
         ...apiConfig,
       }
     );
@@ -91,7 +157,7 @@ export const getExchangeRate = async (
   } catch (error) {
     console.error(
       "Error fetching exchange rate:",
-      error
+      error?.response?.data || error
     );
 
     return null;
