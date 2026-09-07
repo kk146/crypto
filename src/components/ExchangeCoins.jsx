@@ -36,12 +36,16 @@ function ExchangeCoins() {
 
   const [loading, setLoading] = useState(false);
 
-  // Check whether a currency is crypto
   const isCrypto = (currency) => {
     return Boolean(currencyIds[currency]);
   };
 
-  // Get crypto price in a selected fiat currency
+  /*
+  ============================================
+  CRYPTO PRICE FROM COINGECKO
+  ============================================
+  */
+
   const getCryptoRate = async (
     cryptoName,
     fiatCurrency
@@ -64,27 +68,49 @@ function ExchangeCoins() {
     );
   };
 
-  // Get fiat-to-fiat exchange rate
+  /*
+  ============================================
+  FIAT RATE FROM FRANKFURTER
+  ============================================
+  */
+
   const getFiatRate = async (
     fromCurrency,
     toCurrency
   ) => {
+    const from = fromCurrency.toUpperCase();
+    const to = toCurrency.toUpperCase();
+
     const response = await fetch(
-      `https://api.frankfurter.app/latest?from=${fromCurrency}&to=${toCurrency}`
+      `https://api.frankfurter.dev/v2/rate/${from}/${to}`
     );
 
     if (!response.ok) {
       throw new Error(
-        "Unable to fetch fiat exchange rate"
+        `Unable to get ${from}/${to} rate`
       );
     }
 
     const data = await response.json();
 
-    return data?.rates?.[toCurrency] ?? null;
+    if (
+      !data ||
+      typeof data.rate !== "number"
+    ) {
+      throw new Error(
+        "Invalid fiat exchange rate"
+      );
+    }
+
+    return data.rate;
   };
 
-  // Format final result
+  /*
+  ============================================
+  FORMAT RESULT
+  ============================================
+  */
+
   const formatResult = (
     value,
     currency
@@ -97,20 +123,24 @@ function ExchangeCoins() {
     )} ${currency}`;
   };
 
+  /*
+  ============================================
+  EXCHANGE
+  ============================================
+  */
+
   const handleExchange = async () => {
     const numericAmount = Number(amount);
 
-    // Validate amount
     if (
       !amount ||
-      Number.isNaN(numericAmount) ||
+      !Number.isFinite(numericAmount) ||
       numericAmount <= 0
     ) {
       alert("Please enter a valid value");
       return;
     }
 
-    // Same currency
     if (sellCurrency === buyCurrency) {
       setResult(
         formatResult(
@@ -128,48 +158,41 @@ function ExchangeCoins() {
       let exchangeRate = null;
 
       /*
-      ============================================
-      1. CRYPTO → CRYPTO
-      ============================================
-      Example:
-      1 Bitcoin → Ethereum
-      1 Ethereum → Bitcoin
+      ----------------------------------------
+      CRYPTO → CRYPTO
+      ----------------------------------------
       */
 
       if (
         isCrypto(sellCurrency) &&
         isCrypto(buyCurrency)
       ) {
-        const sellPriceUSD =
+        const sellUSD =
           await getCryptoRate(
             sellCurrency,
             "USD"
           );
 
-        const buyPriceUSD =
+        const buyUSD =
           await getCryptoRate(
             buyCurrency,
             "USD"
           );
 
         if (
-          sellPriceUSD !== null &&
-          buyPriceUSD !== null &&
-          buyPriceUSD > 0
+          sellUSD !== null &&
+          buyUSD !== null &&
+          buyUSD > 0
         ) {
           exchangeRate =
-            sellPriceUSD / buyPriceUSD;
+            sellUSD / buyUSD;
         }
       }
 
       /*
-      ============================================
-      2. CRYPTO → FIAT
-      ============================================
-      Example:
-      1 Bitcoin → INR
-      1 Ethereum → EUR
-      1 Bitcoin → GBP
+      ----------------------------------------
+      CRYPTO → FIAT
+      ----------------------------------------
       */
 
       else if (
@@ -186,12 +209,9 @@ function ExchangeCoins() {
       }
 
       /*
-      ============================================
-      3. FIAT → CRYPTO
-      ============================================
-      Example:
-      1000 INR → Bitcoin
-      1000 EUR → Ethereum
+      ----------------------------------------
+      FIAT → CRYPTO
+      ----------------------------------------
       */
 
       else if (
@@ -216,13 +236,9 @@ function ExchangeCoins() {
       }
 
       /*
-      ============================================
-      4. FIAT → FIAT
-      ============================================
-      Example:
-      1000 EUR → INR
-      1000 USD → INR
-      1000 GBP → EUR
+      ----------------------------------------
+      FIAT → FIAT
+      ----------------------------------------
       */
 
       else if (
@@ -240,7 +256,12 @@ function ExchangeCoins() {
           );
       }
 
-      // Make sure a valid rate was received
+      /*
+      ----------------------------------------
+      CHECK RATE
+      ----------------------------------------
+      */
+
       if (
         exchangeRate === null ||
         exchangeRate === undefined ||
@@ -250,7 +271,12 @@ function ExchangeCoins() {
         return;
       }
 
-      // Calculate converted amount
+      /*
+      ----------------------------------------
+      CALCULATE
+      ----------------------------------------
+      */
+
       const convertedAmount =
         numericAmount * exchangeRate;
 
@@ -277,21 +303,13 @@ function ExchangeCoins() {
   return (
     <div className="w-full bg-white">
 
-      {/* ========================================
-          HEADING
-      ======================================== */}
-
       <h2 className="mb-5 text-[15px] font-semibold text-black">
         Exchange Coins
       </h2>
 
-      {/* ========================================
-          SELL ROW
-      ======================================== */}
+      {/* SELL */}
 
       <div className="flex w-full items-center gap-3">
-
-        {/* Sell label */}
 
         <div className="w-[30px] shrink-0">
           <span className="text-[10px] font-medium text-[#ff6b22]">
@@ -299,37 +317,29 @@ function ExchangeCoins() {
           </span>
         </div>
 
-        {/* Sell currency */}
-
         <div className="relative flex-1">
           <select
             value={sellCurrency}
             onChange={(e) => {
-              setSellCurrency(
-                e.target.value
-              );
+              setSellCurrency(e.target.value);
               setResult("");
             }}
             className="h-[40px] w-full appearance-none rounded-[9px] border-0 bg-[#f8f8f8] px-3 pr-8 text-[10px] font-semibold text-[#64748b] outline-none"
           >
-            {currencies.map(
-              (currency) => (
-                <option
-                  key={currency}
-                  value={currency}
-                >
-                  {currency}
-                </option>
-              )
-            )}
+            {currencies.map((currency) => (
+              <option
+                key={currency}
+                value={currency}
+              >
+                {currency}
+              </option>
+            ))}
           </select>
 
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-black">
             ▼
           </span>
         </div>
-
-        {/* Amount */}
 
         <div className="flex-1">
           <label className="mb-1 block text-[9px] font-medium text-[#94a3b8]">
@@ -342,9 +352,7 @@ function ExchangeCoins() {
             step="any"
             value={amount}
             onChange={(e) => {
-              setAmount(
-                e.target.value
-              );
+              setAmount(e.target.value);
               setResult("");
             }}
             placeholder="Enter amount"
@@ -353,13 +361,9 @@ function ExchangeCoins() {
         </div>
       </div>
 
-      {/* ========================================
-          BUY ROW
-      ======================================== */}
+      {/* BUY */}
 
       <div className="mt-5 flex w-full items-center gap-3">
-
-        {/* Buy label */}
 
         <div className="w-[30px] shrink-0">
           <span className="text-[10px] font-medium text-[#42a58e]">
@@ -367,37 +371,29 @@ function ExchangeCoins() {
           </span>
         </div>
 
-        {/* Buy currency */}
-
         <div className="relative flex-1">
           <select
             value={buyCurrency}
             onChange={(e) => {
-              setBuyCurrency(
-                e.target.value
-              );
+              setBuyCurrency(e.target.value);
               setResult("");
             }}
             className="h-[40px] w-full appearance-none rounded-[9px] border-0 bg-[#f8f8f8] px-3 pr-8 text-[10px] font-semibold text-[#64748b] outline-none"
           >
-            {currencies.map(
-              (currency) => (
-                <option
-                  key={currency}
-                  value={currency}
-                >
-                  {currency}
-                </option>
-              )
-            )}
+            {currencies.map((currency) => (
+              <option
+                key={currency}
+                value={currency}
+              >
+                {currency}
+              </option>
+            ))}
           </select>
 
           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-black">
             ▼
           </span>
         </div>
-
-        {/* Result */}
 
         <div className="flex-1">
           <span className="whitespace-nowrap text-[10px] font-semibold text-[#42a58e]">
@@ -408,9 +404,7 @@ function ExchangeCoins() {
         </div>
       </div>
 
-      {/* ========================================
-          EXCHANGE BUTTON
-      ======================================== */}
+      {/* BUTTON */}
 
       <div className="mt-6 flex justify-center">
         <button
