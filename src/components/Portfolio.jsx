@@ -56,16 +56,24 @@ function Portfolio() {
     0
   );
 
-  const data = {
-    labels: portfolioLabels,
+ const data = {
+  labels: portfolioLabels,
 
-    datasets: [
-      {
-        data: portfolioValues,
-        borderWidth: 0,
-      },
-    ],
-  };
+  datasets: [
+    {
+      data: portfolioValues,
+
+      backgroundColor: [
+        "#3b82f6",
+        "#f87171",
+        "#4ecdc4",
+      ],
+
+      borderColor: "#ffffff",
+      borderWidth: 2,
+    },
+  ],
+};
 
   const options = {
     responsive: true,
