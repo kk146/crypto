@@ -81,7 +81,7 @@ function ChartControls({
           ))}
         </div>
 
-        {/* Crypto dropdown + chart type */}
+        {/* Cryptocurrency dropdown */}
         <div className="flex flex-wrap items-center gap-2">
           <div
             ref={dropdownRef}
@@ -90,11 +90,13 @@ function ChartControls({
             <button
               type="button"
               onClick={() =>
-                setIsCoinMenuOpen((current) => !current)
+                setIsCoinMenuOpen((open) => !open)
               }
               className="flex min-w-[190px] items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 outline-none"
             >
-              <span>{selectedText}</span>
+              <span className="text-gray-700">
+                {selectedText}
+              </span>
 
               <span className="ml-3 text-gray-400">
                 {isCoinMenuOpen ? "▲" : "▼"}
@@ -102,7 +104,7 @@ function ChartControls({
             </button>
 
             {isCoinMenuOpen && (
-              <div className="absolute right-0 z-20 mt-1 w-[210px] rounded-md border border-gray-200 bg-white p-2 shadow-lg">
+              <div className="absolute right-0 z-50 mt-1 w-[210px] rounded-md border border-gray-200 bg-white p-2 shadow-lg">
                 {coins.map((coin) => {
                   const selected =
                     selectedCoins.includes(coin);
@@ -110,16 +112,18 @@ function ChartControls({
                   return (
                     <label
                       key={coin}
-                      className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50"
                     >
                       <input
                         type="checkbox"
                         checked={selected}
                         onChange={() => toggleCoin(coin)}
-                        className="h-3.5 w-3.5"
+                        className="h-4 w-4"
                       />
 
-                      <span>{coin}</span>
+                      <span className="text-xs font-medium text-gray-700">
+                        {coin}
+                      </span>
                     </label>
                   );
                 })}
@@ -127,6 +131,7 @@ function ChartControls({
             )}
           </div>
 
+          {/* Chart type */}
           <select
             value={chartType}
             onChange={(e) => setChartType(e.target.value)}
@@ -138,7 +143,7 @@ function ChartControls({
         </div>
       </div>
 
-      {/* Selected cryptocurrencies */}
+      {/* Selected coins */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-xs text-gray-400">
           Selected:
