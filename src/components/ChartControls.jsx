@@ -8,7 +8,7 @@ function ChartControls({
   selectedCoins,
   toggleCoin,
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isCryptoOpen, setIsCryptoOpen] = useState(false);
   const dropdownRef = useRef(null);
 
   const ranges = ["1D", "1W", "1M", "6M", "1Y"];
@@ -21,25 +21,23 @@ function ChartControls({
     "Binance",
   ];
 
+  // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event) => {
+    const handleOutsideClick = (event) => {
       if (
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target)
       ) {
-        setIsOpen(false);
+        setIsCryptoOpen(false);
       }
     };
 
-    document.addEventListener(
-      "mousedown",
-      handleClickOutside
-    );
+    document.addEventListener("mousedown", handleOutsideClick);
 
     return () => {
       document.removeEventListener(
         "mousedown",
-        handleClickOutside
+        handleOutsideClick
       );
     };
   }, []);
@@ -49,9 +47,10 @@ function ChartControls({
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* RANGE BUTTONS */}
+    <div className="relative z-50 flex flex-col gap-3">
+      {/* TOP CONTROLS */}
+      <div className="relative z-50 flex flex-wrap items-center justify-between gap-3">
+        {/* DATE RANGE */}
         <div className="flex flex-wrap gap-1.5">
           {ranges.map((range) => (
             <button
@@ -69,34 +68,41 @@ function ChartControls({
           ))}
         </div>
 
-        {/* RIGHT CONTROLS */}
-        <div className="flex items-center gap-2">
-          {/* CRYPTO SELECTOR */}
+        {/* RIGHT SIDE CONTROLS */}
+        <div className="relative z-50 flex items-center gap-2">
+          {/* CRYPTOCURRENCY DROPDOWN */}
           <div
             ref={dropdownRef}
-            className="relative"
+            className="relative z-[9999]"
           >
+            {/* DROPDOWN BUTTON */}
             <button
               type="button"
-              onClick={() => setIsOpen((value) => !value)}
-              className="flex h-[32px] w-[180px] items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700"
+              onClick={() => {
+                setIsCryptoOpen((previous) => !previous);
+              }}
+              className="relative z-[9999] flex h-[32px] w-[180px] cursor-pointer items-center justify-between rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 outline-none"
             >
-              <span>
+              <span className="pointer-events-none truncate">
                 {selectedCoins.length === 1
                   ? selectedCoins[0]
                   : `${selectedCoins.length} Cryptocurrencies`}
               </span>
 
-              <span className="text-[10px] text-gray-500">
-                {isOpen ? "▲" : "▼"}
+              <span className="pointer-events-none ml-2 text-[10px] text-gray-500">
+                {isCryptoOpen ? "▲" : "▼"}
               </span>
             </button>
 
-            {isOpen && (
+            {/* DROPDOWN MENU */}
+            {isCryptoOpen && (
               <div
-                className="absolute right-0 top-[38px] z-[9999] w-[220px] rounded-md border border-gray-200 bg-white p-2 shadow-xl"
+                className="absolute right-0 top-[38px] z-[99999] w-[220px] rounded-md border border-gray-200 bg-white p-2 shadow-xl"
                 style={{
-                  color: "#374151",
+                  pointerEvents: "auto",
+                }}
+                onMouseDown={(event) => {
+                  event.stopPropagation();
                 }}
               >
                 {coins.map((coin) => {
@@ -107,16 +113,16 @@ function ChartControls({
                     <button
                       key={coin}
                       type="button"
-                      onClick={() =>
-                        handleCoinClick(coin)
-                      }
-                      className={`flex w-full items-center gap-3 rounded-md px-2 py-2 text-left ${
+                      onClick={() => {
+                        handleCoinClick(coin);
+                      }}
+                      className={`flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-left ${
                         selected
                           ? "bg-blue-50"
                           : "bg-white hover:bg-gray-50"
                       }`}
                     >
-                      {/* CUSTOM CHECKBOX */}
+                      {/* CHECKBOX */}
                       <span
                         className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                           selected
@@ -133,11 +139,12 @@ function ChartControls({
 
                       {/* COIN NAME */}
                       <span
-                        className="text-xs font-medium"
+                        className="pointer-events-none text-xs font-medium"
                         style={{
                           color: "#374151",
-                          opacity: 1,
+                          display: "block",
                           visibility: "visible",
+                          opacity: 1,
                         }}
                       >
                         {coin}
@@ -145,6 +152,13 @@ function ChartControls({
                     </button>
                   );
                 })}
+
+                {/* MAXIMUM 2 MESSAGE */}
+                <div className="mt-1 border-t border-gray-100 px-2 pt-2">
+                  <span className="text-[10px] text-gray-400">
+                    Select up to 2 cryptocurrencies
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -152,10 +166,10 @@ function ChartControls({
           {/* CHART TYPE */}
           <select
             value={chartType}
-            onChange={(e) =>
-              setChartType(e.target.value)
+            onChange={(event) =>
+              setChartType(event.target.value)
             }
-            className="h-[32px] rounded-md border border-gray-200 bg-white px-3 text-xs text-gray-700 outline-none"
+            className="h-[32px] cursor-pointer rounded-md border border-gray-200 bg-white px-3 text-xs text-gray-700 outline-none"
           >
             <option value="line">Line Chart</option>
             <option value="bar">Bar Chart</option>
@@ -163,7 +177,7 @@ function ChartControls({
         </div>
       </div>
 
-      {/* SELECTED */}
+      {/* SELECTED COINS */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-xs text-gray-400">
           Selected:
