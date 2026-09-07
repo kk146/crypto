@@ -10,9 +10,7 @@ export default function ChartTypeDropdown({
     >
       <option value="line">Line Chart</option>
       <option value="bar">Bar Chart</option>
-      <option value="bar-chart-horizontal">
-        Horizontal Bar
-      </option>
+     
     </select>
   );
 }
